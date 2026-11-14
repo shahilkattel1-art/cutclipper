@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: cutclipper-api
+    runtime: docker
+    plan: standard
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: CUTCLIPPER_ENVIRONMENT
+        value: production
+      - key: CUTCLIPPER_DATA_DIR
+        value: /data
+      - key: CUTCLIPPER_CORS_ORIGINS
+        value: '["*"]'
+      - key: CUTCLIPPER_WHISPER_DEVICE
+        value: cpu
+      - key: CUTCLIPPER_WHISPER_COMPUTE_TYPE
+        value: int8
+    disk:
+      name: cutclipper-data
+      mountPath: /data
+      sizeGB: 10
