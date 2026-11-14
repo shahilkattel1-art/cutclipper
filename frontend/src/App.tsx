@@ -31,6 +31,7 @@ import {
 } from './lib/api'
 import { clearActiveJob, readActiveJob, storeActiveJob } from './lib/activeJob'
 import { clearCaptionDraft, readCaptionDraft, writeCaptionDraft } from './lib/captionDrafts'
+import { regroupCaptionSegments } from './lib/captionDensity'
 import { downloadSrt } from './lib/srt'
 import { DEFAULT_SETTINGS, formatDuration, pluralize } from './lib/utils'
 import { CAPTION_FONT_OPTIONS } from './lib/captionFonts'
@@ -111,6 +112,7 @@ function AppContent() {
   const captionScriptRef = useRef<CaptionSettings['nepali_script']>('devanagari')
   const captionRomanEditedRef = useRef(false)
   const captionJobLoaded = useRef<string | null>(null)
+  const captionSettingsJob = useRef<string | null>(null)
   const restoreAttempted = useRef(false)
 
   const activeCaptionSegments =
@@ -132,8 +134,20 @@ function AppContent() {
         }
       : job
 
+  // A finished job carries the caption style that was rendered. Seed the
+  // editor from it once, so drawer controls (including density) edit the same
+  // state the download will use instead of a stale server copy.
+  useEffect(() => {
+    if (!job?.id || captionSettingsJob.current === job.id) return
+    captionSettingsJob.current = job.id
+    setCaptionSettings(job.settings.captions)
+    setSettings((current) => ({ ...current, captions: job.settings.captions }))
+  }, [job?.id, job?.settings.captions])
+
   const captionEditSettings =
-    step === 'caption' ? captionSettings : (job?.settings.captions ?? settings.captions)
+    step === 'caption' || step === 'results' || step === 'processing'
+      ? captionSettings
+      : settings.captions
   const captionEditScript: NepaliScript =
     captionEditorScript ??
     (step === 'caption'
@@ -462,13 +476,30 @@ function AppContent() {
       captionScriptRef.current = nextScript
       setCaptionEditorScript(nextScript)
       setCaptionSettings(next)
+      setSettings((current) => ({ ...current, captions: next }))
+
+      // Density is a grouping setting, not just a render hint. Rebuild the
+      // editable lines so changing "words per caption" is visible here too.
+      let nextSegments = captionSegments
       let nextRoman = captionRomanSegments
+      if (next.max_words !== captionSettings.max_words) {
+        nextSegments = regroupCaptionSegments(captionSegments, next.max_words)
+        nextRoman = captionRomanSegments
+          ? regroupCaptionSegments(captionRomanSegments, next.max_words)
+          : captionRomanSegments
+        setCaptionSegments(nextSegments)
+        setCaptionRomanSegments(nextRoman)
+        if (captionTranslation) {
+          setCaptionTranslation(regroupCaptionSegments(captionTranslation, next.max_words))
+        }
+      }
+
       if (scriptChanged) {
         if (nextScript === 'roman') {
-          if (captionRomanEditedRef.current && captionRomanSegments?.length) {
+          if (captionRomanEditedRef.current && nextRoman?.length) {
             // Keep the user's hand-edited Roman lines.
-          } else if (captionSegments.length) {
-            scheduleRomanSegments(captionSegments)
+          } else if (nextSegments.length) {
+            scheduleRomanSegments(nextSegments)
           } else {
             setCaptionRomanSegments(null)
             nextRoman = null
@@ -478,12 +509,14 @@ function AppContent() {
           cancelRomanisation()
         }
       }
-      persistCaptionDraft(captionSegments, nextRoman, nextScript)
+      persistCaptionDraft(nextSegments, nextRoman, nextScript)
     },
     [
       cancelRomanisation,
       captionRomanSegments,
       captionSegments,
+      captionSettings.max_words,
+      captionTranslation,
       persistCaptionDraft,
       scheduleRomanSegments,
     ],
