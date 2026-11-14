@@ -1506,7 +1506,7 @@ function SiteFooter() {
                 No accounts. No watermarks.
               </span>
               <a
-                href="https://github.com/shahil-kattel/cutclipper"
+                href="https://github.com/shahilkattel1-art/cutclipper"
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-full border-[1.5px] border-ink bg-paper-soft px-2.5 py-1 font-semibold text-ink shadow-[1px_2px_0_#211d19] transition hover:-translate-y-px hover:bg-mustard-soft"

@@ -5,7 +5,7 @@
 **Paste a link or drop a file. Get finished vertical clips.**  
 CutClipper ingests a video from a public URL or a local upload, finds the moments worth keeping, reframes them to 9:16 with stabilized face tracking, burns in animated captions, and exports clean MP4s — no watermarks, no accounts, no usage caps.
 
-[![CI](https://github.com/shahil-kattel/cutclipper/actions/workflows/ci.yml/badge.svg)](https://github.com/shahil-kattel/cutclipper/actions/workflows/ci.yml)
+[![CI](https://github.com/shahilkattel1-art/cutclipper/actions/workflows/ci.yml/badge.svg)](https://github.com/shahilkattel1-art/cutclipper/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22D3EE.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-9B6DFF.svg)](backend/)
 [![React 19](https://img.shields.io/badge/react-19-FF4FD8.svg)](frontend/)
@@ -175,7 +175,7 @@ cutclipper/
 The fastest path on any Docker host:
 
 ```bash
-git clone https://github.com/shahil-kattel/cutclipper.git
+git clone https://github.com/shahilkattel1-art/cutclipper.git
 cd cutclipper
 docker compose up --build
 ```
