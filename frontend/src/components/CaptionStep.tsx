@@ -252,7 +252,7 @@ export function CaptionStep({
             Devanagari fonts.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           <Pill tone="cyan" className="gap-1.5">
             <Film className="h-3 w-3" aria-hidden="true" />
             {preview.title}
@@ -305,7 +305,7 @@ export function CaptionStep({
                 className="absolute inset-0"
               />
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-dashed border-ink/20 px-2 pb-1 pt-3 text-[10.5px] font-medium text-ink-soft">
+            <div className="flex items-center justify-between gap-x-3 gap-y-1 border-t border-dashed border-ink/20 px-2 pb-1 pt-3 text-[10.5px] font-medium text-ink-soft">
               <span className="inline-flex min-w-0 items-center gap-1.5">
                 <Sparkles className="h-3 w-3 shrink-0 text-tomato/70" aria-hidden="true" />
                 Live preview · captions render in sync with playback
@@ -347,7 +347,7 @@ export function CaptionStep({
                     preserved.
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
                     aria-pressed={captionView === 'source'}
@@ -427,7 +427,7 @@ export function CaptionStep({
                   }
                 />
                 {captions.secondary_enabled && nepaliScript === 'devanagari' ? (
-                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-ink/20 bg-paper-soft px-2.5 py-2">
+                  <div className="flex items-center gap-2 rounded-lg border border-ink/20 bg-paper-soft px-2.5 py-2">
                     <label
                       htmlFor="secondary-caption-font"
                       className="text-[10.5px] font-medium text-ink-soft"
@@ -675,7 +675,7 @@ export function CaptionStep({
                   )}
                 </div>
               </div>
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-ink/20 bg-paper-soft px-3 py-2.5">
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-ink/20 bg-paper-soft px-3 py-2.5">
                 <div>
                   <p className="text-[11.5px] font-semibold text-ink">
                     {task === 'translate' ? 'English translation' : 'Caption output'}
@@ -714,7 +714,7 @@ export function CaptionStep({
               </p>
             </div>
 
-            <div className="paper-inset mt-6 flex flex-wrap items-center justify-between gap-3 px-3.5 py-3">
+            <div className="paper-inset mt-6 flex items-center justify-between gap-3 px-3.5 py-3">
               <div className="flex items-center gap-2 text-[11px] text-ink-soft">
                 <Check className="h-3.5 w-3.5 text-teal/80" aria-hidden="true" />
                 {editorSegments.length} editable lines · {transcript?.words.length ?? 0} words

@@ -491,7 +491,7 @@ export function LinkStep({
 
         <div
           id="supported-sources"
-          className="mt-5 flex flex-wrap items-center justify-center gap-2"
+          className="mt-5 flex items-center justify-center gap-2"
         >
           <span className="mr-1 font-hand text-[16px] text-ink-soft">plays nice with</span>
           {SUPPORTED_SOURCES.map((source, index) => (
@@ -663,7 +663,7 @@ function PreviewCard({
             <h2 className="mt-2.5 line-clamp-2 font-display text-[23px] font-semibold leading-[1.12] tracking-[-0.025em] text-ink">
               {preview.title}
             </h2>
-            <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[10.5px] font-medium text-ink-soft">
+            <div className="mt-2 flex items-center gap-x-2.5 gap-y-1.5 text-[10.5px] font-medium text-ink-soft">
               {preview.uploader ? <span>{preview.uploader}</span> : null}
               <span className="hidden h-3 w-px bg-ink/20 sm:block" />
               <span>{formatDuration(preview.duration)} source</span>
@@ -677,7 +677,7 @@ function PreviewCard({
               ) : null}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-2.5">
             <Button onClick={onContinue} iconRight={ArrowRight} className="flex-1 sm:flex-none">
               Style my clips
             </Button>

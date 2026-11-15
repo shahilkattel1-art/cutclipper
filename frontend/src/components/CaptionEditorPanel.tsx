@@ -246,7 +246,7 @@ export function CaptionLineEditor({
 
   return (
     <div className={cn('space-y-3', className)}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] font-semibold text-ink-soft">
           {segments.length} editable {segments.length === 1 ? 'line' : 'lines'}
         </p>
@@ -338,7 +338,7 @@ function SegmentRow({
           : 'border-ink/20 bg-paper hover:border-ink/50',
       )}
     >
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+      <div className="flex items-center gap-2">
         <span className="w-6 shrink-0 font-display text-[10px] tabular-nums text-ink-faint">
           {String(index + 1).padStart(2, '0')}
         </span>
@@ -730,7 +730,7 @@ export function CaptionEditorDrawer({
                     timings.
                   </p>
                   {englishSegments?.length ? (
-                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <div className="mt-2 flex items-center justify-between gap-2">
                       <span className="rounded border border-teal/40 bg-teal-soft px-2 py-1 text-[9.5px] font-semibold text-teal">
                         English ready · {englishSegments.length} lines
                       </span>
@@ -813,7 +813,7 @@ export function CaptionEditorDrawer({
               )}
             </div>
 
-            <footer className="flex flex-wrap items-center justify-between gap-2 border-t-[1.5px] border-ink bg-paper px-4 py-3 sm:px-5">
+            <footer className="flex items-center justify-between gap-2 border-t-[1.5px] border-ink bg-paper px-4 py-3 sm:px-5">
               <span className="text-[10px] leading-4 text-ink-faint">
                 {script === 'roman'
                   ? 'The editor keeps the canonical lines; Roman is shown under each line.'

@@ -337,7 +337,7 @@ export function CaptionStyleControls({
       ) : null}
 
       <div>
-        <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <div className="mb-2 flex items-center gap-x-2 gap-y-1">
           <Sparkles className="h-3.5 w-3.5 text-tomato" aria-hidden="true" />
           <p className="text-[11.5px] font-semibold text-ink">Word play</p>
           <span className="text-[9px] text-ink-faint">the spoken word leads</span>
