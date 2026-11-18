@@ -637,7 +637,7 @@ def _box_rectangle(
         bottom = baseline + pad_y + min(pad_y, descender * 0.5)
 
         curr_x = line_start_x
-        for word_index, width in enumerate(widths):
+        for _word_index, width in enumerate(widths):
             if flat_index == active_word:
                 box_left = curr_x - pad_x
                 box_right = curr_x + width + pad_x
@@ -660,11 +660,7 @@ def _box_rectangle(
                     f"l {round(x0)} {round(y0+r)} "
                     f"b {round(x0)} {round(y0+r-k)} {round(x0+r-k)} {round(y0)} {round(x0+r)} {round(y0)}"
                 )
-                return (
-                    f"{{\\p1\\c{_ass_inline_colour(colour)}\\alpha&H4D&}}"
-                    f"{drawing}"
-                    "{\\p0}"
-                )
+                return f"{{\\p1\\c{_ass_inline_colour(colour)}\\alpha&H4D&}}" f"{drawing}" "{\\p0}"
             curr_x += width + gap_width
             flat_index += 1
     return None

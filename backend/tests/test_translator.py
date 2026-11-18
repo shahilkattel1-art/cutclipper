@@ -186,4 +186,3 @@ def test_merge_translated_handles_partial_alignment() -> None:
     assert merged[0].text == "First"
     assert merged[1].text == "दोस्रो"  # Retains original, not misaligned with "Third"
     assert merged[2].text == "Third"
-

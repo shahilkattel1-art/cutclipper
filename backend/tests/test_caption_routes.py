@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient

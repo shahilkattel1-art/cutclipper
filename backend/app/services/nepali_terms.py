@@ -185,6 +185,49 @@ _PHRASE_REPLACEMENTS = (
         re.compile(r"(?<!\S)यहाँ\s+6162956\s+चिविको\s+memory(?!\S)"),
         "यहाँ 16 plus 256GB memory",
     ),
+    # Common household, kitchen, tech, and eCommerce code-switched phrases
+    (
+        re.compile(
+            r"(?<!\S)(?:electric|इलेक्ट्रिक)\s+(?:kettle|क्याटल|केटल)((?:को|ले|मा|का|की|कै|सँग|संग|बाट|बाटै)?)",
+            re.IGNORECASE,
+        ),
+        r"Electric Kettle\1",
+    ),
+    (
+        re.compile(
+            r"(?<!\S)(?:cordless|कर्डलेस)\s+(?:kettle|क्याटल|केटल)((?:को|ले|मा|का|की|कै|सँग|संग|बाट|बाटै)?)",
+            re.IGNORECASE,
+        ),
+        r"cordless kettle\1",
+    ),
+    (
+        re.compile(
+            r"(?<!\S)(?:electric|इलेक्ट्रिक)\s+(?:thermos|थर्मस)((?:को|ले|मा|का|की|कै|सँग|संग|बाट|बाटै)?)",
+            re.IGNORECASE,
+        ),
+        r"Electric thermos\1",
+    ),
+    (
+        re.compile(
+            r"(?<!\S)(?:auto|अटो)\s+(?:cut|कट)((?:को|ले|मा|का|की|कै|सँग|संग|बाट|बाटै)?)",
+            re.IGNORECASE,
+        ),
+        r"auto cut\1",
+    ),
+    (
+        re.compile(
+            r"(?<!\S)(?:stainless|स्टेनलेस)\s+(?:steel|स्टिल)((?:को|ले|मा|का|की|कै|सँग|संग|बाट|बाटै)?)",
+            re.IGNORECASE,
+        ),
+        r"stainless steel\1",
+    ),
+    (
+        re.compile(
+            r"(?<!\S)(?:unboxing|अनबक्सिङ|अनबक्सिंग)\s+(?:and|र|एन)\s+(?:review|रिभ्यु|रिभ्यू)((?:को|ले|मा|का|की|कै)?)",
+            re.IGNORECASE,
+        ),
+        r"unboxing and review\1",
+    ),
 )
 
 _CHATGPT_SPLIT_RE = re.compile(
@@ -500,6 +543,11 @@ def english_term_for(word: str) -> str | None:
     direct = NEPALI_ENGLISH_TERMS.get(word)
     if direct:
         return direct
+    corrected_word = NEPALI_WORD_CORRECTIONS.get(word)
+    if corrected_word:
+        direct = NEPALI_ENGLISH_TERMS.get(corrected_word)
+        if direct:
+            return direct
     for suffix in NEPALI_CASE_SUFFIXES:
         if len(word) <= len(suffix) or not word.endswith(suffix):
             continue

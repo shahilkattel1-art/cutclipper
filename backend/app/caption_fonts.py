@@ -138,9 +138,7 @@ def get_font_metrics(
     if spec:
         if bold and italic:
             filename = (
-                spec.files.get("bold_italic")
-                or spec.files.get("bold")
-                or spec.files.get("regular")
+                spec.files.get("bold_italic") or spec.files.get("bold") or spec.files.get("regular")
             )
         elif bold:
             filename = spec.files.get("bold") or spec.files.get("regular")
@@ -183,11 +181,7 @@ def get_font_metrics(
         cap_h = int(getattr(os2, "sCapHeight", 0) or round(win_asc * 0.72))
         hmtx = font["hmtx"].metrics
         cmap = font.getBestCmap() or {}
-        advances = {
-            code: int(hmtx[g_name][0])
-            for code, g_name in cmap.items()
-            if g_name in hmtx
-        }
+        advances = {code: int(hmtx[g_name][0]) for code, g_name in cmap.items() if g_name in hmtx}
         default_advance = round(upem * 0.5)
         return CachedFontMetrics(
             win_total=win_total,
@@ -226,4 +220,3 @@ def measure_text_width(
     if letter_spacing != 0.0:
         width += len(text) * letter_spacing
     return max(0.0, width)
-

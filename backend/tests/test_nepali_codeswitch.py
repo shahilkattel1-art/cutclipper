@@ -396,3 +396,43 @@ def test_english_sentence_run_is_repaired_before_caption_grouping() -> None:
         "association",
         "यो",
     ]
+
+
+def test_electric_kettle_and_thermos_code_switching() -> None:
+    """Mid-sentence English loanwords stay in Latin script while surrounding Nepali stays in Devanagari."""
+    tokens = ("यो", "नयाँ", "इलेक्ट्रिक", "केटल", "र", "थर्मसको", "अनबक्सिङ", "हो।")
+    text, words = _build_caption_line(tokens)
+    assert text == "यो नयाँ Electric Kettle र thermosको unboxing हो।"
+    assert [word.text for word in words] == [
+        "यो",
+        "नयाँ",
+        "Electric",
+        "Kettle",
+        "र",
+        "thermosको",
+        "unboxing",
+        "हो।",
+    ]
+    roman = romanize_nepali_text(text)
+    assert "Electric Kettle" in roman
+    assert "thermos" in roman
+    assert "unboxing" in roman
+    # Nepali words continue smoothly in Roman
+    assert roman == "Yo naya Electric Kettle ra thermos ko unboxing ho."
+
+
+def test_appliance_features_code_switched_with_case_suffixes() -> None:
+    """Appliance features and suffixes correctly switch between English and Nepali."""
+    tokens = ("यसमा", "कर्डलेस", "बेस", "अटो", "कट", "र", "वारन्टी", "छ।")
+    text, words = _build_caption_line(tokens)
+    assert text == "यसमा cordless base auto cut र warranty छ।"
+    assert [word.text for word in words] == [
+        "यसमा",
+        "cordless",
+        "base",
+        "auto",
+        "cut",
+        "र",
+        "warranty",
+        "छ।",
+    ]

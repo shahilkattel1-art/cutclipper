@@ -455,15 +455,16 @@ def _dedupe_words(words: list[Word], duration: float) -> list[Word]:
     return cleaned
 
 
-# A fluent Nepali prompt is more effective than a negative "not Hindi"
-# instruction: it primes Nepali verb forms, orthography, and the danda while
-# avoiding Hindi vocabulary that a negative prompt would still expose to the
-# decoder as context.
+# A fluent Nepali prompt primes vocabulary, punctuation, and code-switching.
+# Code-switched English words (appliances, brand names, tech terms) are kept
+# in Latin script while natural Nepali continues in Devanagari.
 _NEPALI_PROMPT = (
-    "नेपाली भाषाको शुद्ध, स्वाभाविक बोली। "
-    "ठेट नेपाली शब्द, स्पष्ट हिज्जे, दण्ड (।) र प्राकृतिक वाक्य संरचना प्रयोग गरिएको छ। "
-    'उदाहरण: आज हामी काठमाडौंमा भेट्यौं र धेरै कुरा गर्यौं। उहाँले भन्नुभयो, "यो राम्रो छ।" '
-    "नेपालीमा छ, छन्, भयो, गर्छ, गर्नुहुन्छ जस्ता क्रियापद प्रयोग हुन्छन्।"
+    "नेपाली भाषाको शुद्ध, स्वाभाविक बोली र कोड-स्विचिङ (code-switching)। "
+    "नेपाली बोल्दा बीचमा आउने अङ्ग्रेजी शब्द वा प्राविधिक शब्दावलीलाई Latin/English लिपिमा "
+    "र नेपाली शब्दलाई देवनागरीमा शुद्ध हिज्जे, स्वाभाविक क्रियापद र दण्ड (।) सहित लेखिन्छ। "
+    "उदाहरण: यो भिडियोमा नयाँ Electric Kettle र thermos को unboxing गर्दैछौँ। "
+    "यसको build quality, design, price र warranty एकदमै राम्रो छ। "
+    "तपाईंले online अर्डर गर्दा special discount पाउनुहुनेछ।"
 )
 _QUALITY_MODELS_NE = {
     "fast": "small",

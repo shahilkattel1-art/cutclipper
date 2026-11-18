@@ -711,6 +711,7 @@ def test_devanagari_combining_marks_do_not_force_an_extra_wrap() -> None:
 def test_box_word_style_resizes_in_all_text_sizes(tmp_path: Path) -> None:
     """The active-word box scales proportionally across small, medium, and large text sizes."""
     import re
+
     from app.pipeline.captions import build_ass
 
     words = [
@@ -742,7 +743,7 @@ def test_box_word_style_resizes_in_all_text_sizes(tmp_path: Path) -> None:
         matches = box_coords_re.findall(content)
         assert matches, f"No box drawings found for font_size={fs}"
         # Second word is "Kettle" (matches[1])
-        x0, y0, x1 = (int(v) for v in matches[1])
+        x0, _y0, x1 = (int(v) for v in matches[1])
         width = x1 - x0
         box_widths.append(width)
 
