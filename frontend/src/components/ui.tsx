@@ -47,7 +47,7 @@ export function Button({
       {...props}
       disabled={disabled || loading}
       className={cn(
-        'relative inline-flex shrink-0 select-none items-center justify-center gap-2 whitespace-nowrap font-semibold tracking-[-0.01em] transition-all duration-150',
+        'relative inline-flex shrink-0 select-none items-center justify-center gap-2 overflow-hidden whitespace-nowrap font-semibold tracking-[-0.01em] transition-all duration-150',
         'active:translate-x-[2px] active:translate-y-[3px] active:shadow-none disabled:cursor-not-allowed disabled:border-ink/15 disabled:bg-paper-deep disabled:text-ink-faint disabled:opacity-100 disabled:shadow-none disabled:hover:translate-x-0 disabled:hover:translate-y-0',
         sizes[size],
         variants[variant],

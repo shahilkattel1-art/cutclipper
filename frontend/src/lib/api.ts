@@ -86,9 +86,13 @@ async function request<T>(path: string, init: RequestInit = {}, timeoutMs = 30_0
           details?: Record<string, unknown>
         }
       } | null
-      throw new ApiError(body?.error?.message || `The server returned ${response.status}.`, {
+      const statusMsg =
+        response.status === 502 || response.status === 503 || response.status === 504
+          ? 'The backend is starting up or temporarily unavailable — please wait a moment and try again.'
+          : `The server returned ${response.status}.`
+      throw new ApiError(body?.error?.message || statusMsg, {
         code: body?.error?.code,
-        retryable: body?.error?.retryable,
+        retryable: body?.error?.retryable ?? (response.status >= 500),
         status: response.status,
         details: body?.error?.details,
       })
@@ -189,6 +193,7 @@ export async function transcribeCaptions(
   force = false,
   quality?: TranscriptionQuality | null,
   task: TranscriptionTask = 'transcribe',
+  maxWords?: number,
 ): Promise<TranscriptResponse> {
   return request<TranscriptResponse>(
     '/captions/transcribe',
@@ -200,6 +205,7 @@ export async function transcribeCaptions(
         quality: quality || undefined,
         task,
         force,
+        max_words: maxWords,
       }),
     },
     60 * 60 * 1000,

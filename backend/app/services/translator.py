@@ -13,6 +13,7 @@ import httpx
 
 from app.config import Settings
 from app.pipeline.captions import build_caption_segments
+from app.pipeline.types import Sentence, Word
 from app.schemas import CaptionSegment
 from app.services.transcriber import transcribe_audio
 
@@ -34,8 +35,12 @@ def _merge_translated(
     translated: list[CaptionSegment],
 ) -> list[CaptionSegment]:
     merged = list(segments)
-    for index, item in zip(indices, translated, strict=False):
-        merged[index] = item
+    translated_by_start = {round(item.start, 3): item for item in translated}
+    for index in indices:
+        orig = segments[index]
+        match = translated_by_start.get(round(orig.start, 3))
+        if match is not None:
+            merged[index] = match
     return merged
 
 
@@ -185,27 +190,19 @@ def align_translation(
     return aligned
 
 
-def _read_cached_words(path: Path) -> tuple[list[object], list[object]] | None:
+def _read_cached_words(path: Path) -> tuple[list[Word], list[Sentence]] | None:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
 
-    class _Item:
-        __slots__ = ("end", "start", "text")
-
-        def __init__(self, start: float, end: float, text: str) -> None:
-            self.start = start
-            self.end = end
-            self.text = text
-
     words = [
-        _Item(float(item["start"]), float(item["end"]), str(item["text"]))
+        Word(start=float(item["start"]), end=float(item["end"]), text=str(item["text"]))
         for item in payload.get("words", [])
         if isinstance(item, dict)
     ]
     sentences = [
-        _Item(float(item["start"]), float(item["end"]), str(item["text"]))
+        Sentence(start=float(item["start"]), end=float(item["end"]), text=str(item["text"]))
         for item in payload.get("sentences", [])
         if isinstance(item, dict)
     ]

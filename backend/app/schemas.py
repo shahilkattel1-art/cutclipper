@@ -422,6 +422,7 @@ class TranscribeRequest(BaseModel):
     quality: TranscriptionQuality | None = None
     task: TranscriptionTask = "transcribe"
     force: bool = False
+    max_words: int | None = Field(default=None, ge=2, le=30)
 
 
 class TranslateSegmentsRequest(BaseModel):

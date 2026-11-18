@@ -200,6 +200,7 @@ async def transcribe_captions(payload: TranscribeRequest, request: Request) -> T
     upload = await asyncio.to_thread(manager.uploads.load, payload.upload_id)
     language_key = payload.language or "auto"
     quality_key = payload.quality or "default"
+    max_words = payload.max_words or ClipSettings().captions.max_words
     # v4 invalidates transcripts produced before speech-coverage repair and the
     # expanded mixed Nepali/English glossary; re-transcribing is required to get
     # the missing clauses and Latin English spellings.
@@ -211,7 +212,7 @@ async def transcribe_captions(payload: TranscribeRequest, request: Request) -> T
             cached = TranscriptResponse.model_validate_json(cache_path.read_text("utf-8"))
             cached = _refresh_cached_transcript(
                 cached,
-                max_words=settings.captions.max_words,
+                max_words=max_words,
             )
             cached.cached = True
             return cached
@@ -246,7 +247,7 @@ async def transcribe_captions(payload: TranscribeRequest, request: Request) -> T
     )
     segments = build_caption_segments(
         transcript.words,
-        max_words=settings.captions.max_words,
+        max_words=max_words,
     )
     warnings = list(transcript.warnings)
     if transcript.language == "ne" and language != "ne":

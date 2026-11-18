@@ -167,3 +167,23 @@ async def test_all_english_lines_skip_transcription(
     )
     assert result.segments == segments
     assert result.warnings
+
+
+def test_merge_translated_handles_partial_alignment() -> None:
+    segments = [
+        CaptionSegment(start=0.0, end=1.0, text="पहिलो"),
+        CaptionSegment(start=1.0, end=2.0, text="दोस्रो"),
+        CaptionSegment(start=2.0, end=3.0, text="तेस्रो"),
+    ]
+    # Suppose only segment 0 and 2 got translated, but not segment 1
+    translated = [
+        CaptionSegment(start=0.0, end=1.0, text="First", language="en"),
+        CaptionSegment(start=2.0, end=3.0, text="Third", language="en"),
+    ]
+    indices = [0, 1, 2]
+    merged = translator._merge_translated(segments, indices, translated)
+    assert len(merged) == 3
+    assert merged[0].text == "First"
+    assert merged[1].text == "दोस्रो"  # Retains original, not misaligned with "Third"
+    assert merged[2].text == "Third"
+
