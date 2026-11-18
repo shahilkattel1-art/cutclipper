@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.caption_fonts import font_spec
+from app.caption_fonts import font_spec, get_font_metrics, measure_text_width
 from app.pipeline.timing import text_timing_weight
 from app.pipeline.types import CaptionRenderResult, Word
 from app.schemas import (
@@ -148,23 +148,52 @@ def _char_units(char: str) -> float:
     return 0.53
 
 
-def _estimated_width(text: str, font_size: int) -> float:
-    return sum(_char_units(char) for char in text) * font_size
+def _estimated_width(
+    text: str,
+    font_size: int,
+    font_name: str = "Inter",
+    *,
+    bold: bool = True,
+    italic: bool = False,
+    letter_spacing: float = 0.0,
+) -> float:
+    return measure_text_width(
+        text,
+        font_size,
+        font_name,
+        bold=bold,
+        italic=italic,
+        letter_spacing=letter_spacing,
+    )
 
 
 def _line_width(
     words: list[_WordRef],
     font_size: int,
     *,
+    font_name: str = "Inter",
+    bold: bool = True,
+    italic: bool = False,
     letter_spacing: float = 0.0,
     word_spacing: float = 0.0,
 ) -> float:
     if not words:
         return 0.0
-    gap = font_size * 0.26 + letter_spacing + word_spacing
+    gap = (
+        measure_text_width(" ", font_size, font_name, bold=bold, italic=italic)
+        + letter_spacing
+        + word_spacing
+    )
     return (
         sum(
-            _estimated_width(word.text, font_size) + len(word.text) * letter_spacing
+            measure_text_width(
+                word.text,
+                font_size,
+                font_name,
+                bold=bold,
+                italic=italic,
+                letter_spacing=letter_spacing,
+            )
             for word in words
         )
         + max(0, len(words) - 1) * gap
@@ -176,6 +205,9 @@ def _make_groups(
     *,
     font_size: int,
     target_width: int,
+    font_name: str = "Inter",
+    bold: bool = True,
+    italic: bool = False,
     letter_spacing: float = 0.0,
     word_spacing: float = 0.0,
     max_words: int = _MAX_GROUP_WORDS,
@@ -219,6 +251,9 @@ def _make_groups(
             and _line_width(
                 projected,
                 font_size,
+                font_name=font_name,
+                bold=bold,
+                italic=italic,
                 letter_spacing=letter_spacing,
                 word_spacing=word_spacing,
             )
@@ -267,8 +302,14 @@ def _separator(word_spacing: float, letter_spacing: float) -> str:
     return f"{{\\fsp{word_spacing + letter_spacing:g}}} {{\\fsp{letter_spacing:g}}}"
 
 
-def _space_width(font_size: int) -> float:
-    return _estimated_width(" ", font_size)
+def _space_width(
+    font_size: int,
+    font_name: str = "Inter",
+    *,
+    bold: bool = True,
+    italic: bool = False,
+) -> float:
+    return measure_text_width(" ", font_size, font_name, bold=bold, italic=italic)
 
 
 def _typed_word_text(word: _WordRef, reveal_before: float) -> str:
@@ -525,7 +566,10 @@ def _box_rectangle(
     group: _Group,
     active_word: int,
     *,
+    font_name: str,
     font_size: int,
+    bold: bool = True,
+    italic: bool = False,
     letter_spacing: float,
     word_spacing: float,
     x: int,
@@ -536,49 +580,92 @@ def _box_rectangle(
 ) -> str | None:
     """Draw a marker rectangle behind the active word.
 
-    Coordinates are relative to the ASS anchor (x, y) so the rectangle shares
-    the same entrance transform as the text event it accompanies.
+    Coordinates are relative to the ASS anchor (x, y) with \\an7 so the
+    rectangle matches the text bounds and adapts to all fonts and font sizes.
     """
 
-    gap_width = _space_width(font_size) + letter_spacing + word_spacing
-    line_height = font_size * 1.2
-    block_height = line_height * len(group.lines)
-    if alignment == 2:
-        # Bottom-aligned: the primary lines stay where they were and the
-        # secondary line grows above them.
-        block_top = y - block_height
-    elif alignment == 5:
-        # Centred: extra leading lines push the primary block down by half
-        # of their height.
-        block_top = y - block_height / 2 + leading_height / 2
+    metrics = get_font_metrics(font_name, bold=bold, italic=italic)
+    if metrics is not None and metrics.win_total > 0:
+        descender = (metrics.win_desc / metrics.win_total) * font_size
+        cap_h = (
+            (metrics.cap_height / metrics.win_total) * font_size
+            if metrics.cap_height
+            else font_size * 0.72
+        )
     else:
-        block_top = y + leading_height
+        descender = font_size * 0.25
+        cap_h = font_size * 0.72
+
+    gap_width = (
+        measure_text_width(" ", font_size, font_name, bold=bold, italic=italic)
+        + letter_spacing
+        + word_spacing
+    )
+    pad_x = max(3.0, font_size * 0.08)
+    pad_y = max(3.0, font_size * 0.08)
+    num_lines = len(group.lines)
 
     flat_index = 0
     for line_index, line in enumerate(group.lines):
         widths = [
-            _estimated_width(word.text, font_size) + len(word.text) * letter_spacing
+            measure_text_width(
+                word.text,
+                font_size,
+                font_name,
+                bold=bold,
+                italic=italic,
+                letter_spacing=letter_spacing,
+            )
             for word in line
         ]
         line_width = sum(widths) + gap_width * max(0, len(line) - 1)
-        left = x - line_width / 2
-        for width in widths:
+        line_start_x = x - line_width / 2
+
+        if alignment == 2:
+            # Bottom-aligned: text block bottom is anchored at y - descender
+            baseline = y - descender - (num_lines - 1 - line_index) * font_size
+        elif alignment == 5:
+            # Centered: midpoint of block (including secondary lines) is at y
+            primary_h = (num_lines - 1) * font_size + cap_h
+            total_h = primary_h + leading_height
+            baseline = y - total_h / 2 + leading_height + line_index * font_size + cap_h
+        else:
+            # Top-aligned
+            baseline = y + leading_height + line_index * font_size + cap_h + 0.25 * font_size
+
+        top = baseline - cap_h - pad_y
+        bottom = baseline + pad_y + min(pad_y, descender * 0.5)
+
+        curr_x = line_start_x
+        for word_index, width in enumerate(widths):
             if flat_index == active_word:
-                baseline = block_top + line_index * line_height + font_size * 0.92
-                pad_x = font_size * 0.07
-                pad_y = font_size * 0.1
-                top = baseline - font_size * 0.78 - pad_y
-                bottom = baseline + font_size * 0.2 + pad_y
-                right = left + width
+                box_left = curr_x - pad_x
+                box_right = curr_x + width + pad_x
+
+                r = min(pad_x, pad_y, max(2.0, font_size * 0.06))
+                k = 0.55228475 * r
+                x0 = box_left - x
+                y0 = top - y
+                x1 = box_right - x
+                y1 = bottom - y
+
+                drawing = (
+                    f"m {round(x0+r)} {round(y0)} "
+                    f"l {round(x1-r)} {round(y0)} "
+                    f"b {round(x1-r+k)} {round(y0)} {round(x1)} {round(y0+r-k)} {round(x1)} {round(y0+r)} "
+                    f"l {round(x1)} {round(y1-r)} "
+                    f"b {round(x1)} {round(y1-r+k)} {round(x1-r+k)} {round(y1)} {round(x1-r)} {round(y1)} "
+                    f"l {round(x0+r)} {round(y1)} "
+                    f"b {round(x0+r-k)} {round(y1)} {round(x0)} {round(y1-r+k)} {round(x0)} {round(y1-r)} "
+                    f"l {round(x0)} {round(y0+r)} "
+                    f"b {round(x0)} {round(y0+r-k)} {round(x0+r-k)} {round(y0)} {round(x0+r)} {round(y0)}"
+                )
                 return (
                     f"{{\\p1\\c{_ass_inline_colour(colour)}\\alpha&H4D&}}"
-                    f"m {round(left - x - pad_x)} {round(top - y)} "
-                    f"l {round(right - x + pad_x)} {round(top - y)} "
-                    f"l {round(right - x + pad_x)} {round(bottom - y)} "
-                    f"l {round(left - x - pad_x)} {round(bottom - y)}"
+                    f"{drawing}"
                     "{\\p0}"
                 )
-            left += width + gap_width
+            curr_x += width + gap_width
             flat_index += 1
     return None
 
@@ -690,7 +777,8 @@ def _secondary_line_prefix(
         projected = [*lines[-1], ref]
         if (
             lines[-1]
-            and _line_width(projected, font_size) > available_width
+            and _line_width(projected, font_size, font_name=secondary_font, bold=True)
+            > available_width
             and len(lines) < max_lines
         ):
             lines.append([ref])
@@ -757,10 +845,21 @@ def build_ass(
         else []
     )
 
+    caption_font = settings.font
+    bold = -1 if settings.font_style in (CaptionFontStyle.BOLD, CaptionFontStyle.BOLD_ITALIC) else 0
+    italic = (
+        -1 if settings.font_style in (CaptionFontStyle.ITALIC, CaptionFontStyle.BOLD_ITALIC) else 0
+    )
+    is_bold = bold != 0
+    is_italic = italic != 0
+
     groups = _make_groups(
         refs,
         font_size=font_size,
         target_width=width,
+        font_name=caption_font,
+        bold=is_bold,
+        italic=is_italic,
         letter_spacing=letter_spacing,
         word_spacing=word_spacing,
         max_words=settings.max_words,
@@ -770,10 +869,6 @@ def build_ass(
     word_style = settings.word_style
     line_style = settings.line_style
     separator = _separator(word_spacing, letter_spacing)
-    # The style carries the user's requested face. Devanagari groups override
-    # it inline when that face cannot shape them, so English-only lines keep
-    # the chosen typeface instead of the whole track switching to Mukta.
-    caption_font = settings.font
     secondary_font_size = max(1, round(font_size * _SECONDARY_SIZE_RATIO))
     # Roman Nepali is Latin text, so it uses the same face the user picked for
     # the main caption line. Devanagari keeps its own secondary font.
@@ -782,10 +877,6 @@ def build_ass(
     )
     secondary_font = (
         _caption_font_for(secondary_refs, secondary_requested_font) if secondary_refs else ""
-    )
-    bold = -1 if settings.font_style in (CaptionFontStyle.BOLD, CaptionFontStyle.BOLD_ITALIC) else 0
-    italic = (
-        -1 if settings.font_style in (CaptionFontStyle.ITALIC, CaptionFontStyle.BOLD_ITALIC) else 0
     )
     header = f"""[Script Info]
 ; Generated by CutClipper
@@ -859,16 +950,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             primary_font_size=font_size,
             max_lines=settings.max_lines,
         )
-        leading_height = secondary_lines * secondary_font_size * 1.2
+        leading_height = secondary_lines * secondary_font_size
 
         if line_style == CaptionStyle.TYPEWRITER:
             position_tag = f"{{\\an{alignment}\\pos({x},{y})\\q0}}"
+            drawing_tag = f"{{\\an7\\pos({x},{y})\\q0}}"
             if word_style == CaptionStyle.BOX:
                 for word_index, word in enumerate(flat_words):
                     rectangle = _box_rectangle(
                         group,
                         word_index,
+                        font_name=group_font,
                         font_size=font_size,
+                        bold=is_bold,
+                        italic=is_italic,
                         letter_spacing=letter_spacing,
                         word_spacing=word_spacing,
                         x=x,
@@ -882,7 +977,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                             word.start,
                             _event_end(flat_words, word_index, hold_end),
                             rectangle,
-                            tag=position_tag,
+                            tag=drawing_tag,
                             layer=0,
                         )
             reveal_times: list[float] = []
@@ -914,7 +1009,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     rectangle = _box_rectangle(
                         group,
                         word_index,
+                        font_name=group_font,
                         font_size=font_size,
+                        bold=is_bold,
+                        italic=is_italic,
                         letter_spacing=letter_spacing,
                         word_spacing=word_spacing,
                         x=x,

@@ -708,6 +708,52 @@ def test_devanagari_combining_marks_do_not_force_an_extra_wrap() -> None:
     assert caption_module._estimated_width("नमस्ते संसारा।", 140) < 1080 * 0.81
 
 
+def test_box_word_style_resizes_in_all_text_sizes(tmp_path: Path) -> None:
+    """The active-word box scales proportionally across small, medium, and large text sizes."""
+    import re
+    from app.pipeline.captions import build_ass
+
+    words = [
+        Word(0.0, 0.5, "Electric"),
+        Word(0.5, 1.0, "Kettle"),
+        Word(1.0, 1.5, "thermos"),
+    ]
+
+    box_widths: list[float] = []
+    box_coords_re = re.compile(r"m\s+(-?\d+)\s+(-?\d+)\s+l\s+(-?\d+)")
+
+    for fs in [40, 80, 140]:
+        out = tmp_path / f"box_{fs}.ass"
+        result = build_ass(
+            words,
+            clip_start=0,
+            clip_duration=2.0,
+            settings=CaptionSettings(
+                font="Mukta",
+                font_size=fs,
+                word_style=CaptionStyle.BOX,
+                line_style=None,
+            ),
+            output_size=(1080, 1920),
+            output_path=out,
+        )
+        assert result.event_count > 0
+        content = out.read_text(encoding="utf-8")
+        matches = box_coords_re.findall(content)
+        assert matches, f"No box drawings found for font_size={fs}"
+        # Second word is "Kettle" (matches[1])
+        x0, y0, x1 = (int(v) for v in matches[1])
+        width = x1 - x0
+        box_widths.append(width)
+
+    # Box width must scale strictly monotonically with font size
+    assert box_widths[0] < box_widths[1] < box_widths[2]
+    # Sizing must be proportional (within 10% of linear scaling)
+    ratio_small_to_med = box_widths[1] / box_widths[0]
+    expected_ratio = 80 / 40
+    assert abs(ratio_small_to_med - expected_ratio) < 0.35
+
+
 def _timestamp(value: str) -> float:
     hours, minutes, rest = value.split(":")
     seconds = float(rest)
