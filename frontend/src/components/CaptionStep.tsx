@@ -391,10 +391,10 @@ export function CaptionStep({
 
             {!loading && task !== 'translate' && hasNepaliSource ? (
               <div className="mb-4 flex flex-col gap-3 rounded-xl border-[1.5px] border-ink/25 bg-paper p-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-1.5 text-[11.5px] font-semibold text-ink">
-                    <Type className="h-3.5 w-3.5 text-tomato" aria-hidden="true" />
-                    Nepali caption script
+                    <Type className="h-3.5 w-3.5 shrink-0 text-tomato" aria-hidden="true" />
+                    <span>Nepali caption script</span>
                   </p>
                   <p className="mt-0.5 max-w-xl text-[10px] leading-4 text-ink-soft">
                     Roman writes the Nepali words in Latin letters; English words in the speech stay
@@ -402,12 +402,14 @@ export function CaptionStep({
                     the Devanagari source is kept for translation and switching back.
                   </p>
                 </div>
-                <NepaliScriptToggle
-                  value={nepaliScript}
-                  onChange={(value) => onCaptionsChange({ ...captions, nepali_script: value })}
-                  busy={romanising}
-                  devanagariFont={captions.secondary_font}
-                />
+                <div className="shrink-0">
+                  <NepaliScriptToggle
+                    value={nepaliScript}
+                    onChange={(value) => onCaptionsChange({ ...captions, nepali_script: value })}
+                    busy={romanising}
+                    devanagariFont={captions.secondary_font}
+                  />
+                </div>
               </div>
             ) : null}
 

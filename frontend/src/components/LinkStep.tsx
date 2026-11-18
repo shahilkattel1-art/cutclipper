@@ -491,7 +491,7 @@ export function LinkStep({
 
         <div
           id="supported-sources"
-          className="mt-5 flex items-center justify-center gap-2"
+          className="mt-5 flex flex-wrap items-center justify-center gap-2"
         >
           <span className="mr-1 font-hand text-[16px] text-ink-soft">plays nice with</span>
           {SUPPORTED_SOURCES.map((source, index) => (

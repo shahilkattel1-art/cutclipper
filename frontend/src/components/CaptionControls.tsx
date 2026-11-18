@@ -269,7 +269,7 @@ export function NepaliScriptToggle({
         aria-pressed={value === 'devanagari'}
         onClick={() => onChange('devanagari')}
         className={cn(
-          'rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition',
+          'inline-flex h-9 shrink-0 select-none items-center justify-center whitespace-nowrap rounded-lg border px-3 text-[11.5px] font-semibold transition',
           value === 'devanagari'
             ? 'border-[1.5px] border-ink bg-mustard-soft text-ink shadow-[2px_2px_0_#211d19]'
             : 'border-[1.5px] border-ink/25 bg-paper-soft text-ink-soft hover:border-ink hover:text-ink',
@@ -284,7 +284,7 @@ export function NepaliScriptToggle({
         aria-busy={busy}
         onClick={() => onChange('roman')}
         className={cn(
-          'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition',
+          'inline-flex h-9 shrink-0 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-[11.5px] font-semibold transition',
           value === 'roman'
             ? 'border-[1.5px] border-ink bg-mustard-soft text-ink shadow-[2px_2px_0_#211d19]'
             : 'border-[1.5px] border-ink/25 bg-paper-soft text-ink-soft hover:border-ink hover:text-ink',
@@ -292,7 +292,7 @@ export function NepaliScriptToggle({
       >
         Roman
         {busy ? (
-          <LoaderCircle className="h-3 w-3 animate-spin" aria-hidden="true" />
+          <LoaderCircle className="h-3 w-3 shrink-0 animate-spin" aria-hidden="true" />
         ) : (
           <span className="font-hand text-[12px] text-ink-faint">Aa</span>
         )}

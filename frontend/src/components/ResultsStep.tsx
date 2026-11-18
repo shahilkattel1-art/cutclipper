@@ -229,7 +229,7 @@ export function ResultsStep({
         className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between"
       >
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Pill tone="success">
               <Check className="h-3 w-3" aria-hidden="true" />
               Export complete
@@ -255,7 +255,7 @@ export function ResultsStep({
               fresh off the cutting mat
             </span>
           </div>
-          <div className="flex items-center gap-x-2.5 gap-y-1 text-[12px] font-medium text-ink-soft">
+          <p className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12px] font-medium text-ink-soft">
             <span className="max-w-lg truncate">{job.video?.title ?? 'Your video'}</span>
             <span className="hidden h-3 border-l border-dashed border-ink/30 sm:block" />
             <span className="text-ink-soft">
@@ -297,7 +297,7 @@ export function ResultsStep({
                   icon={Palette}
                   aria-expanded={false}
                 >
-                  {job.settings.captions.enabled ? 'Edit captions before export' : 'Add subtitles'}
+                  {job.settings.captions.enabled ? 'Restyle captions' : 'Add subtitles'}
                 </Button>
               ) : null}
               {canEditSettings ? (
@@ -333,7 +333,7 @@ export function ResultsStep({
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay: 0.08 }}
-        className="mt-6 flex items-center gap-2.5 border-y border-dashed border-ink/25 py-3 text-[10px] font-semibold text-ink-soft"
+        className="mt-6 flex flex-wrap items-center gap-2.5 border-y border-dashed border-ink/25 py-3 text-[10px] font-semibold text-ink-soft"
       >
         <span className="inline-flex items-center gap-1.5">
           <span className="h-1.5 w-1.5 rounded-full border border-ink bg-teal" />
@@ -638,7 +638,7 @@ function ClipPreview({
       className="paper-card taped mt-6 p-2.5 sm:p-3.5"
       aria-label="Clip preview player"
     >
-      <div className="flex items-center justify-between gap-2 px-1 pb-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-2.5">
         <span className="inline-flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-[0.16em] text-tomato">
           <span className="h-px w-4 bg-tomato" aria-hidden="true" />
           Preview · playhead
@@ -886,7 +886,7 @@ function ClipPreview({
             </div>
           ) : null}
 
-          <div className="mt-auto flex items-center gap-2 pt-1">
+          <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
             <button
               type="button"
               onClick={onDownloadClip}
@@ -1152,7 +1152,7 @@ function CaptionQuickEdit({
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-2 pt-0.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
             <p className="max-w-[11rem] text-[9px] leading-4 text-ink-faint">
               The player already shows these changes.
             </p>

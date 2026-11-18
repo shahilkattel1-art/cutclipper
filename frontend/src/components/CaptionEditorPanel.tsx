@@ -627,22 +627,24 @@ export function CaptionEditorDrawer({
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
               {onScriptChange ? (
                 <div className="flex flex-col gap-2 rounded-xl border-[1.5px] border-ink/25 bg-paper-soft px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="flex items-center gap-1.5 text-[11.5px] font-semibold text-ink">
-                      <Languages className="h-3.5 w-3.5 text-tomato" aria-hidden="true" />
-                      Nepali caption script
+                      <Languages className="h-3.5 w-3.5 shrink-0 text-tomato" aria-hidden="true" />
+                      <span>Nepali caption script</span>
                     </p>
                     <p className="mt-0.5 text-[10px] leading-4 text-ink-soft">
                       Keep the spoken words in देवनागरी or write the Nepali words in Roman letters.
                       English words stay English either way.
                     </p>
                   </div>
-                  <NepaliScriptToggle
-                    value={script}
-                    onChange={onScriptChange}
-                    busy={romanising}
-                    devanagariFont={devanagariFont}
-                  />
+                  <div className="shrink-0">
+                    <NepaliScriptToggle
+                      value={script}
+                      onChange={onScriptChange}
+                      busy={romanising}
+                      devanagariFont={devanagariFont}
+                    />
+                  </div>
                 </div>
               ) : null}
 
@@ -813,13 +815,13 @@ export function CaptionEditorDrawer({
               )}
             </div>
 
-            <footer className="flex items-center justify-between gap-2 border-t-[1.5px] border-ink bg-paper px-4 py-3 sm:px-5">
+            <footer className="flex flex-col gap-2.5 border-t-[1.5px] border-ink bg-paper px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
               <span className="text-[10px] leading-4 text-ink-faint">
                 {script === 'roman'
                   ? 'The editor keeps the canonical lines; Roman is shown under each line.'
                   : 'Timing and edits are used by the preview, SRT, and burned video.'}
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 {onDownloadSrt ? (
                   <Button
                     variant="secondary"

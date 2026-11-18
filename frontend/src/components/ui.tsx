@@ -47,7 +47,7 @@ export function Button({
       {...props}
       disabled={disabled || loading}
       className={cn(
-        'relative inline-flex select-none items-center justify-center gap-2 font-semibold tracking-[-0.01em] transition-all duration-150',
+        'relative inline-flex shrink-0 select-none items-center justify-center gap-2 whitespace-nowrap font-semibold tracking-[-0.01em] transition-all duration-150',
         'active:translate-x-[2px] active:translate-y-[3px] active:shadow-none disabled:cursor-not-allowed disabled:border-ink/15 disabled:bg-paper-deep disabled:text-ink-faint disabled:opacity-100 disabled:shadow-none disabled:hover:translate-x-0 disabled:hover:translate-y-0',
         sizes[size],
         variants[variant],
@@ -55,12 +55,12 @@ export function Button({
       )}
     >
       {loading ? (
-        <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
+        <LoaderCircle className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
       ) : Icon ? (
-        <Icon className="h-4 w-4" aria-hidden="true" />
+        <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
       ) : null}
-      <span>{children}</span>
-      {IconRight && !loading ? <IconRight className="h-4 w-4" aria-hidden="true" /> : null}
+      <span className="truncate">{children}</span>
+      {IconRight && !loading ? <IconRight className="h-4 w-4 shrink-0" aria-hidden="true" /> : null}
     </button>
   )
 }
@@ -223,7 +223,7 @@ export function SectionCard({
           >
             <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
           </span>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             {eyebrow ? (
               <p className="mb-1 flex items-center gap-2 text-[9.5px] font-bold uppercase tracking-[0.18em] text-ink-soft">
                 <span className="inline-block h-px w-4 bg-tomato" aria-hidden="true" />

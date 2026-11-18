@@ -221,21 +221,23 @@ export function CaptionExportStudio({
           />
           {draft.enabled ? (
             <div className="flex flex-col gap-2 rounded-xl border-[1.5px] border-ink/25 bg-paper px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="text-[11.5px] font-semibold text-ink">Nepali caption script</p>
                 <p className="mt-0.5 text-[10px] leading-4 text-ink-soft">
                   देवनागरी keeps the spoken text; Roman writes the Nepali words in Latin letters.
                   English words stay English either way.
                 </p>
               </div>
-              <NepaliScriptToggle
-                value={draft.nepali_script ?? 'devanagari'}
-                onChange={(nepali_script) => {
-                  setDraft((current) => ({ ...current, nepali_script }))
-                  onScriptChange?.(nepali_script)
-                }}
-                devanagariFont={draft.secondary_font}
-              />
+              <div className="shrink-0">
+                <NepaliScriptToggle
+                  value={draft.nepali_script ?? 'devanagari'}
+                  onChange={(nepali_script) => {
+                    setDraft((current) => ({ ...current, nepali_script }))
+                    onScriptChange?.(nepali_script)
+                  }}
+                  devanagariFont={draft.secondary_font}
+                />
+              </div>
             </div>
           ) : null}
           <div className={cn(!draft.enabled && 'pointer-events-none opacity-50')}>

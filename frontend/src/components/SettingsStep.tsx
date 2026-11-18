@@ -561,7 +561,7 @@ export function SettingsStep({
                 <div
                   role="group"
                   aria-label="Reframing method"
-                  className="grid gap-2.5 md:grid-cols-3"
+                  className="grid gap-2.5 md:grid-cols-2"
                 >
                   {REFRAME_MODES.map(({ value, label, copy, icon: Icon }) => {
                     const selected = settings.reframe_mode === value
@@ -725,17 +725,17 @@ export function SettingsStep({
                 </div>
                 {captionLanguage !== 'en' && !translateCaptions ? (
                   <div className="flex flex-col gap-3 rounded-xl border-[1.5px] border-ink/25 bg-paper p-3.5 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <p className="flex items-center gap-1.5 text-[11.5px] font-semibold text-ink">
-                        <Type className="h-3.5 w-3.5 text-tomato" aria-hidden="true" />
-                        Nepali caption script
+                        <Type className="h-3.5 w-3.5 shrink-0 text-tomato" aria-hidden="true" />
+                        <span>Nepali caption script</span>
                       </p>
-                      <p className="mt-0.5 text-[10px] leading-4 text-ink-soft">
+                      <p className="mt-0.5 max-w-md text-[10px] leading-4 text-ink-soft">
                         Roman writes the Nepali words in Latin letters; English words in the speech
                         stay in English. Applies when Nepali is detected.
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
                       {onEditCaptions ? (
                         <Button
                           variant="secondary"
@@ -743,7 +743,7 @@ export function SettingsStep({
                           icon={Captions}
                           onClick={onEditCaptions}
                         >
-                          Edit caption text
+                          Edit captions
                         </Button>
                       ) : null}
                       <NepaliScriptToggle

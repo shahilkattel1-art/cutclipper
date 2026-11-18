@@ -309,7 +309,7 @@ export function ProcessingStep({
                   icon={Captions}
                   className="mb-2 w-full text-ink-soft hover:text-ink"
                 >
-                  Edit caption text
+                  Edit captions
                 </Button>
               ) : null}
               {job?.can_cancel ? (
