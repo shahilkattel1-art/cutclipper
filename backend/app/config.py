@@ -90,6 +90,17 @@ class Settings(BaseSettings):
         ]
     )
 
+    # Auto Hype Clip configuration
+    hype_buffer_minutes: int = Field(default=30, ge=1, le=180)
+    hype_segment_seconds: int = Field(default=10, ge=2, le=60)
+    hype_min_clip_seconds: int = Field(default=30, ge=5, le=180)
+    hype_max_clip_seconds: int = Field(default=60, ge=10, le=300)
+    hype_weight_audio: float = Field(default=0.40, ge=0.0, le=1.0)
+    hype_weight_chat: float = Field(default=0.35, ge=0.0, le=1.0)
+    hype_weight_speech: float = Field(default=0.25, ge=0.0, le=1.0)
+    hype_window_seconds: float = Field(default=5.0, ge=1.0, le=15.0)
+    hype_step_seconds: float = Field(default=1.0, ge=0.5, le=5.0)
+
     @property
     def jobs_dir(self) -> Path:
         return self.data_dir / "jobs"
@@ -99,12 +110,17 @@ class Settings(BaseSettings):
         return self.data_dir / "uploads"
 
     @property
+    def hype_dir(self) -> Path:
+        return self.data_dir / "hype"
+
+    @property
     def fonts_dir(self) -> Path:
         return self.assets_dir / "fonts"
 
     def ensure_directories(self) -> None:
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
         self.uploads_dir.mkdir(parents=True, exist_ok=True)
+        self.hype_dir.mkdir(parents=True, exist_ok=True)
 
 
 @lru_cache

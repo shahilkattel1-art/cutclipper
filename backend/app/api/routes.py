@@ -26,7 +26,9 @@ from app.schemas import (
     ClipSettings,
     CreateJobRequest,
     HealthResponse,
+    HypeRequest,
     JobCaptionsResponse,
+    JobMode,
     JobOut,
     PreviewRequest,
     PreviewResponse,
@@ -382,6 +384,10 @@ async def create_job(payload: CreateJobRequest, request: Request) -> JobOut:
             language=payload.language,
             quality=payload.quality,
             task=payload.task,
+            hype_mode=payload.hype_mode,
+            hype_record_minutes=payload.hype_record_minutes,
+            hype_top_n=payload.hype_top_n,
+            hype_selected_rank=payload.hype_selected_rank,
         )
     else:
         normalized = await validate_remote_url(payload.url or "")
@@ -392,8 +398,96 @@ async def create_job(payload: CreateJobRequest, request: Request) -> JobOut:
             language=payload.language,
             quality=payload.quality,
             task=payload.task,
+            hype_mode=payload.hype_mode,
+            hype_record_minutes=payload.hype_record_minutes,
+            hype_top_n=payload.hype_top_n,
+            hype_selected_rank=payload.hype_selected_rank,
         )
     return manager.snapshot(record.id)
+
+
+@router.post("/hype", response_model=JobOut, status_code=202)
+async def create_hype_job(payload: HypeRequest, request: Request) -> JobOut:
+    """Create an Auto Hype Clip job for a YouTube live stream or VOD."""
+    manager = _manager(request)
+    normalized = await validate_remote_url(payload.url)
+    settings = ClipSettings()
+    settings.min_clip_seconds = int(payload.min_clip_seconds)
+    settings.max_clip_seconds = int(payload.max_clip_seconds)
+
+    record = await manager.create_job(
+        normalized,
+        settings,
+        mode=JobMode.HYPE,
+        language=payload.language,
+        hype_mode=payload.mode,
+        hype_record_minutes=payload.record_minutes,
+        hype_top_n=payload.top_n,
+        hype_selected_rank=payload.selected_rank,
+    )
+    return manager.snapshot(record.id)
+
+
+@router.get("/hype/check-tools")
+async def check_hype_tools(request: Request) -> dict[str, object]:
+    """Check if FFmpeg and yt-dlp are installed for live stream ingestion."""
+    from app.services.ingest_live import check_required_tools
+
+    settings = _settings(request)
+    ready, message = check_required_tools(settings)
+    return {
+        "ready": ready,
+        "message": message,
+    }
+
+
+@router.post("/jobs/{job_id}/hype-moment/{rank}", response_model=JobOut, status_code=202)
+async def regenerate_hype_moment(job_id: str, rank: int, request: Request) -> JobOut:
+    """Re-generate hype clip with a different top moment without re-ingesting."""
+    manager = _manager(request)
+    record = await manager.regenerate_hype_moment(job_id, rank)
+    return manager.snapshot(record.id)
+
+
+@router.get("/jobs/{job_id}/hype-metadata")
+async def get_hype_metadata(job_id: str, request: Request) -> FileResponse:
+    """Download the JSON file containing the hype score breakdown and timestamps."""
+    manager = _manager(request)
+    record = manager.get(job_id)
+    outputs = record.job_dir / "outputs"
+    json_files = list(outputs.glob("*_hype_*.json"))
+    if not json_files:
+        raise AppError(
+            "Hype metadata JSON not found for this job.", code="metadata_not_found", status_code=404
+        )
+    return FileResponse(
+        json_files[0],
+        media_type="application/json",
+        filename=json_files[0].name,
+    )
+
+
+@router.post("/jobs/{job_id}/open-folder")
+async def open_job_folder(job_id: str, request: Request) -> dict[str, str]:
+    """Open the output folder in the OS file manager (Mac Finder, Windows Explorer, etc.)."""
+    import subprocess
+    import sys
+
+    manager = _manager(request)
+    record = manager.get(job_id)
+    folder = record.job_dir / "outputs"
+    if not folder.exists():
+        folder = record.job_dir
+    try:
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", str(folder)])
+        elif sys.platform == "win32":
+            subprocess.Popen(["explorer", str(folder)])
+        else:
+            subprocess.Popen(["xdg-open", str(folder)])
+    except Exception as exc:
+        logger.warning("Could not open folder %s: %s", folder, exc)
+    return {"status": "ok", "path": str(folder)}
 
 
 @router.post("/jobs/{job_id}/restyle", response_model=JobOut, status_code=202)

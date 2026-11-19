@@ -121,6 +121,7 @@ LINE_ENTRANCE_STYLES: frozenset[CaptionStyle] = frozenset(
 class JobMode(StrEnum):
     CLIPS = "clips"
     CAPTIONS = "captions"
+    HYPE = "hype"
 
 
 class CaptionPosition(StrEnum):
@@ -146,10 +147,13 @@ class JobStatus(StrEnum):
 
 class JobStage(StrEnum):
     QUEUED = "queued"
+    RECORDING = "recording"
     FETCHING = "fetching"
     PROBING = "probing"
     TRANSCRIBING = "transcribing"
     FINDING_HIGHLIGHTS = "finding_highlights"
+    SCORING_HYPE = "scoring_hype"
+    CUTTING = "cutting"
     REFRAMING = "reframing"
     CAPTIONING = "captioning"
     RENDERING = "rendering"
@@ -161,13 +165,16 @@ class JobStage(StrEnum):
 
 STAGE_LABELS: dict[JobStage, str] = {
     JobStage.QUEUED: "Waiting for a worker",
+    JobStage.RECORDING: "Recording live feed",
     JobStage.FETCHING: "Preparing video",
     JobStage.PROBING: "Inspecting media",
     JobStage.TRANSCRIBING: "Transcribing speech",
     JobStage.FINDING_HIGHLIGHTS: "Finding highlights",
-    JobStage.REFRAMING: "Reframing shots",
-    JobStage.CAPTIONING: "Building captions",
-    JobStage.RENDERING: "Rendering video",
+    JobStage.SCORING_HYPE: "Scoring hype moments",
+    JobStage.CUTTING: "Cutting boundaries",
+    JobStage.REFRAMING: "Reframing to 9:16",
+    JobStage.CAPTIONING: "Generating subtitles",
+    JobStage.RENDERING: "Exporting vertical clip",
     JobStage.PACKAGING: "Packaging results",
     JobStage.COMPLETE: "Complete",
     JobStage.FAILED: "Failed",
@@ -335,6 +342,12 @@ class PreviewRequest(BaseModel):
         return value.strip()
 
 
+class HypeMode(StrEnum):
+    RECORD = "record"
+    CLIP_NOW = "clip_now"
+    VOD = "vod"
+
+
 class RestyleCaptionsRequest(BaseModel):
     captions: CaptionSettings
     title_suffix: str | None = Field(default=None, max_length=80)
@@ -342,6 +355,10 @@ class RestyleCaptionsRequest(BaseModel):
     # render's words instead of merely changing the caption style.
     segments: list[CaptionSegment] | None = Field(default=None, max_length=5000)
     secondary_segments: list[CaptionSegment] | None = Field(default=None, max_length=5000)
+    hype_mode: HypeMode = HypeMode.VOD
+    hype_record_minutes: float = Field(default=30.0, ge=1.0, le=180.0)
+    hype_top_n: int = Field(default=1, ge=1, le=10)
+    hype_selected_rank: int = Field(default=1, ge=1, le=10)
 
     @model_validator(mode="after")
     def ordered_segments(self) -> RestyleCaptionsRequest:
@@ -378,6 +395,10 @@ class CreateJobRequest(BaseModel):
     # studio sends the Nepali source lines here when the exported video should
     # keep both Nepali and English subtitles.
     secondary_segments: list[CaptionSegment] | None = Field(default=None, max_length=5000)
+    hype_mode: HypeMode = HypeMode.VOD
+    hype_record_minutes: float = Field(default=30.0, ge=1.0, le=180.0)
+    hype_top_n: int = Field(default=1, ge=1, le=10)
+    hype_selected_rank: int = Field(default=1, ge=1, le=10)
 
     @field_validator("url")
     @classmethod
@@ -558,6 +579,8 @@ class JobOut(BaseModel):
     download_all_url: str | None = None
     is_restyle: bool = False
     restyled_from: str | None = None
+    hype_moments: list[HypeMoment] = Field(default_factory=list)
+    hype_selected_moment: HypeMoment | None = None
 
 
 class PreviewResponse(VideoMetadata):
@@ -607,3 +630,42 @@ class ApiConfig(BaseModel):
     caption_styles: list[str]
     transcription_languages: list[dict[str, str]]
     default_settings: ClipSettings
+
+
+class HypeScoreBreakdown(BaseModel):
+    audio: float = 0.0
+    chat: float = 0.0
+    speech: float = 0.0
+    total: float = 0.0
+
+
+class HypeMoment(BaseModel):
+    rank: int = 1
+    peak_time: float
+    start: float
+    end: float
+    duration: float
+    score: float
+    breakdown: HypeScoreBreakdown
+
+
+class HypeRequest(BaseModel):
+    url: str
+    mode: HypeMode = HypeMode.VOD
+    record_minutes: float = Field(default=30.0, ge=1.0, le=180.0)
+    min_clip_seconds: float = Field(default=30.0, ge=10.0, le=120.0)
+    max_clip_seconds: float = Field(default=60.0, ge=15.0, le=180.0)
+    top_n: int = Field(default=1, ge=1, le=10)
+    selected_rank: int = Field(default=1, ge=1, le=10)
+    subtitles: bool = True
+    reframe: bool = True
+    language: str | None = None
+
+
+class HypeJobMetadata(BaseModel):
+    url: str
+    mode: HypeMode
+    selected_moment: HypeMoment
+    all_moments: list[HypeMoment] = Field(default_factory=list)
+    chat_available: bool = True
+    warnings: list[str] = Field(default_factory=list)

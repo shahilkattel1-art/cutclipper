@@ -121,11 +121,59 @@ const RESTYLE_CAPTION_PIPELINE: Array<{
   },
 ]
 
+const HYPE_PIPELINE: Array<{
+  stage: JobStage
+  label: string
+  detail: string
+  icon: LucideIcon
+}> = [
+  {
+    stage: 'recording',
+    label: 'Recording',
+    detail: 'Live rolling buffer / VOD ingest',
+    icon: Download,
+  },
+  {
+    stage: 'scoring_hype',
+    label: 'Scoring hype',
+    detail: 'Audio spikes · chat velocity · speech',
+    icon: Sparkles,
+  },
+  {
+    stage: 'cutting',
+    label: 'Cutting',
+    detail: 'Snapping to silence & sentence edges',
+    icon: Film,
+  },
+  { stage: 'reframing', label: 'Reframing', detail: '1080x1920 face-aware crop', icon: ScanFace },
+  {
+    stage: 'captioning',
+    label: 'Subtitles',
+    detail: 'Bold word-level highlight captions',
+    icon: Captions,
+  },
+  {
+    stage: 'rendering',
+    label: 'Exporting',
+    detail: 'H.264 + AAC · score breakdown JSON',
+    icon: PackageCheck,
+  },
+]
+
 // Stages that share a manifest row with another stage.
 const STAGE_ROW_ALIAS: Partial<Record<JobStage, JobStage>> = {
   queued: 'fetching',
   probing: 'fetching',
   captioning: 'reframing',
+}
+
+const HYPE_STAGE_ROW_ALIAS: Partial<Record<JobStage, JobStage>> = {
+  queued: 'recording',
+  fetching: 'recording',
+  probing: 'recording',
+  transcribing: 'scoring_hype',
+  finding_highlights: 'scoring_hype',
+  packaging: 'rendering',
 }
 
 interface ProcessingStepProps {
@@ -158,26 +206,31 @@ export function ProcessingStep({
   const [elapsed, setElapsed] = useState(0)
   const terminalFailure = job?.status === 'failed' || job?.status === 'cancelled'
   const captionJob = job?.mode === 'captions'
+  const hypeJob = job?.mode === 'hype'
   const restyleJob = job?.is_restyle === true
-  const captionsOn = captionJob || job?.settings.captions.enabled !== false
-  const basePipeline = restyleJob
-    ? captionJob
-      ? RESTYLE_CAPTION_PIPELINE
-      : RESTYLE_CLIP_PIPELINE
-    : captionJob
-      ? CAPTION_PIPELINE
-      : PIPELINE
+  const captionsOn = captionJob || hypeJob || job?.settings.captions.enabled !== false
+  const basePipeline = hypeJob
+    ? HYPE_PIPELINE
+    : restyleJob
+      ? captionJob
+        ? RESTYLE_CAPTION_PIPELINE
+        : RESTYLE_CLIP_PIPELINE
+      : captionJob
+        ? CAPTION_PIPELINE
+        : PIPELINE
   // A clips-only export never enters the captioning stage, so drop that row
   // instead of showing a step that will stay untouched.
   const pipeline =
-    restyleJob || captionJob || captionsOn
+    hypeJob || restyleJob || captionJob || captionsOn
       ? basePipeline
       : basePipeline.filter((row) => row.stage !== 'captioning')
   const progress = job?.progress ?? 0
   const isComplete = job?.status === 'completed'
   const stage = job?.stage ?? 'queued'
   const directIndex = pipeline.findIndex((row) => row.stage === stage)
-  const alias = STAGE_ROW_ALIAS[stage as JobStage]
+  const alias = hypeJob
+    ? (HYPE_STAGE_ROW_ALIAS[stage as JobStage] ?? STAGE_ROW_ALIAS[stage as JobStage])
+    : STAGE_ROW_ALIAS[stage as JobStage]
   const aliasIndex = alias ? pipeline.findIndex((row) => row.stage === alias) : -1
   const currentIndex = isComplete
     ? pipeline.length
@@ -237,23 +290,27 @@ export function ProcessingStep({
               <span className="relative inline-flex h-2 w-2 rounded-full bg-tomato" />
             </span>
             <p className="text-[9.5px] font-bold uppercase tracking-[0.18em] text-tomato">
-              {restyleJob ? 'Caption refresh' : 'Render stream'} · {connectionLabel}
+              {hypeJob ? 'Auto Hype Stream' : restyleJob ? 'Caption refresh' : 'Render stream'} · {connectionLabel}
             </p>
           </div>
           <div className="mt-2 flex flex-wrap items-end gap-x-4">
             <h1 className="font-display text-4xl font-semibold tracking-[-0.05em] text-ink sm:text-[2.8rem]">
               {isComplete
                 ? 'Final touches.'
-                : restyleJob
-                  ? 'Refreshing your captions.'
-                  : 'Cutting your moments.'}
+                : hypeJob
+                  ? 'Finding your hype moment.'
+                  : restyleJob
+                    ? 'Refreshing your captions.'
+                    : 'Cutting your moments.'}
             </h1>
             <span className="mb-1.5 hidden -rotate-2 font-hand text-[18px] text-ink-soft sm:inline">
               {isComplete
                 ? 'almost there'
-                : restyleJob
-                  ? 'same cut, new look'
-                  : 'the scissors are busy'}
+                : hypeJob
+                  ? 'analyzing energy & chat'
+                  : restyleJob
+                    ? 'same cut, new look'
+                    : 'the scissors are busy'}
             </span>
           </div>
           <p className="mt-2 max-w-xl text-sm leading-6 text-ink-soft">

@@ -3,6 +3,7 @@ import type {
   CaptionSegment,
   CaptionSettings,
   ClipSettings,
+  HypeRequest,
   Job,
   JobCaptionsResponse,
   JobOptions,
@@ -336,4 +337,32 @@ export function errorMessage(error: unknown): string {
 
 export function isRetryable(error: unknown): boolean {
   return error instanceof ApiError ? error.retryable : true
+}
+
+export async function createHypeJob(payload: HypeRequest): Promise<Job> {
+  return request<Job>('/hype', { method: 'POST', body: JSON.stringify(payload) }, 30_000)
+}
+
+export async function regenerateHypeMoment(jobId: string, rank: number): Promise<Job> {
+  return request<Job>(
+    `/jobs/${encodeURIComponent(jobId)}/hype-moment/${encodeURIComponent(rank)}`,
+    { method: 'POST' },
+    30_000,
+  )
+}
+
+export async function checkHypeTools(): Promise<{ ready: boolean; message: string | null }> {
+  return request<{ ready: boolean; message: string | null }>('/hype/check-tools', {}, 10_000)
+}
+
+export function hypeMetadataUrl(jobId: string): string {
+  return apiUrl(`/jobs/${encodeURIComponent(jobId)}/hype-metadata`)
+}
+
+export async function openJobFolder(jobId: string): Promise<{ status: string; path: string }> {
+  return request<{ status: string; path: string }>(
+    `/jobs/${encodeURIComponent(jobId)}/open-folder`,
+    { method: 'POST' },
+    5_000,
+  )
 }

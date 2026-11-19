@@ -9,6 +9,7 @@ import {
   Clock3,
   CloudUpload,
   Film,
+  Flame,
   Link2,
   LoaderCircle,
   ScanFace,
@@ -17,13 +18,13 @@ import {
   TriangleAlert,
   WandSparkles,
 } from 'lucide-react'
-import type { PreviewResponse } from '../types/api'
+import type { HypeMode, PreviewResponse } from '../types/api'
 import { assetUrl } from '../lib/api'
 import { cn, formatDuration, sourceName } from '../lib/utils'
 import { Button, Skeleton } from './ui'
 import { useToast } from '../hooks/useToast'
 
-export type SourceMode = 'link' | 'upload' | 'caption'
+export type SourceMode = 'link' | 'upload' | 'caption' | 'hype'
 
 interface LinkStepProps {
   url: string
@@ -40,6 +41,17 @@ interface LinkStepProps {
   uploading: { name: string; progress: number } | null
   error: string | null
   retryable: boolean
+  hypeMode?: HypeMode
+  onHypeModeChange?: (mode: HypeMode) => void
+  hypeRecordMinutes?: number
+  onHypeRecordMinutesChange?: (mins: number) => void
+  hypeMinClip?: number
+  onHypeMinClipChange?: (sec: number) => void
+  hypeMaxClip?: number
+  onHypeMaxClipChange?: (sec: number) => void
+  hypeTopN?: number
+  onHypeTopNChange?: (n: number) => void
+  onStartHype?: () => void
 }
 
 const VIDEO_FILE_PATTERN = /\.(mp4|m4v|mov|mkv|webm|avi|wmv|flv|ts|mts|m2ts|mpg|mpeg|3gp|ogv)$/i
@@ -98,6 +110,17 @@ export function LinkStep({
   uploading,
   error,
   retryable,
+  hypeMode = 'vod',
+  onHypeModeChange,
+  hypeRecordMinutes = 30,
+  onHypeRecordMinutesChange,
+  hypeMinClip = 30,
+  onHypeMinClipChange,
+  hypeMaxClip = 60,
+  onHypeMaxClipChange,
+  hypeTopN = 3,
+  onHypeTopNChange,
+  onStartHype,
 }: LinkStepProps) {
   const [touched, setTouched] = useState(false)
   const [pasting, setPasting] = useState(false)
@@ -244,13 +267,13 @@ export function LinkStep({
                       return
                     }
                     event.preventDefault()
-                    const modes: SourceMode[] = ['link', 'upload', 'caption']
+                    const modes: SourceMode[] = ['link', 'upload', 'caption', 'hype']
                     const currentIndex = modes.indexOf(mode)
                     const next: SourceMode =
                       event.key === 'Home'
                         ? 'link'
                         : event.key === 'End'
-                          ? 'caption'
+                          ? 'hype'
                           : event.key === 'ArrowLeft'
                             ? (modes[(currentIndex + modes.length - 1) % modes.length] ?? 'link')
                             : (modes[(currentIndex + 1) % modes.length] ?? 'upload')
@@ -261,7 +284,7 @@ export function LinkStep({
                       document.getElementById(`source-tab-${next}`)?.focus()
                     })
                   }}
-                  className="mb-3 grid grid-cols-3 gap-1 rounded-xl border-[1.5px] border-ink bg-paper-deep/60 p-1"
+                  className="mb-3 grid grid-cols-2 gap-1 rounded-xl border-[1.5px] border-ink bg-paper-deep/60 p-1 sm:grid-cols-4"
                 >
                   <SourceTab
                     id="source-tab-link"
@@ -301,6 +324,20 @@ export function LinkStep({
                     disabled={Boolean(uploading) || loading}
                     onClick={() => {
                       onModeChange('caption')
+                      setTouched(false)
+                      onClearError()
+                    }}
+                  />
+                  <SourceTab
+                    id="source-tab-hype"
+                    controls="source-panel-hype"
+                    active={mode === 'hype'}
+                    icon={Flame}
+                    label="Auto Hype Clip"
+                    activeTone="bg-tomato-soft"
+                    disabled={Boolean(uploading) || loading}
+                    onClick={() => {
+                      onModeChange('hype')
                       setTouched(false)
                       onClearError()
                     }}
@@ -363,6 +400,226 @@ export function LinkStep({
                     <p className="mt-2.5 px-1 font-hand text-[14px] text-ink-soft">
                       copy, paste, snip — no account, no fuss.
                     </p>
+                  </form>
+                ) : mode === 'hype' ? (
+                  <form
+                    id="source-panel-hype"
+                    role="tabpanel"
+                    aria-labelledby="source-tab-hype"
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      setTouched(true)
+                      if (!url.trim() || loading) return
+                      onStartHype?.()
+                    }}
+                    className="flex flex-col gap-3 sm:gap-3.5"
+                  >
+                    <div>
+                      <label htmlFor="hype-video-url" className="sr-only">
+                        YouTube live stream or VOD URL
+                      </label>
+                      <div className="flex flex-col gap-2.5 sm:flex-row">
+                        <div className="relative flex min-w-0 flex-1 items-center">
+                          <Flame
+                            className="pointer-events-none absolute left-3.5 h-[18px] w-[18px] text-tomato"
+                            aria-hidden="true"
+                          />
+                          <input
+                            id="hype-video-url"
+                            name="url"
+                            type="text"
+                            inputMode="url"
+                            autoComplete="url"
+                            spellCheck={false}
+                            value={url}
+                            onChange={(event) => onUrlChange(event.target.value)}
+                            onFocus={() => setTouched(false)}
+                            placeholder="Paste a YouTube live stream or VOD URL (e.g. youtube.com/watch?v=...)"
+                            aria-invalid={empty || Boolean(error)}
+                            aria-describedby={error ? 'preview-error' : 'supported-sources'}
+                            className="paper-input h-12 w-full rounded-xl pl-11 pr-[5.4rem] text-[13px] font-medium outline-none transition focus:border-tomato sm:h-[3.25rem] sm:text-[14px]"
+                          />
+                          <button
+                            type="button"
+                            onClick={paste}
+                            disabled={pasting}
+                            className="absolute right-2 inline-flex items-center gap-1.5 rounded-md border-[1.5px] border-ink bg-paper px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.04em] text-ink shadow-[1px_2px_0_#211d19] transition hover:-translate-y-px hover:bg-mustard-soft active:translate-y-px active:shadow-none disabled:opacity-50"
+                            aria-label="Paste link from clipboard"
+                          >
+                            <ClipboardPaste className="h-3.5 w-3.5" aria-hidden="true" />
+                            Paste
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border-[1.5px] border-ink/30 bg-paper/60 p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-ink">
+                          Ingestion mode
+                        </span>
+                        <span className="text-[9.5px] text-ink-soft">
+                          Live rolling buffer or full VOD
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+                        <button
+                          type="button"
+                          onClick={() => onHypeModeChange?.('vod')}
+                          className={cn(
+                            'flex flex-col items-start rounded-lg border-[1.5px] p-2.5 text-left transition',
+                            hypeMode === 'vod'
+                              ? 'border-ink bg-mustard-soft shadow-[1px_2px_0_#211d19]'
+                              : 'border-ink/20 bg-paper-soft hover:border-ink/50',
+                          )}
+                        >
+                          <span className="text-[12px] font-bold text-ink">Analyze VOD</span>
+                          <span className="mt-0.5 text-[10px] text-ink-soft">
+                            Scan completed stream or video
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => onHypeModeChange?.('record')}
+                          className={cn(
+                            'flex flex-col items-start rounded-lg border-[1.5px] p-2.5 text-left transition',
+                            hypeMode === 'record'
+                              ? 'border-ink bg-tomato-soft shadow-[1px_2px_0_#211d19]'
+                              : 'border-ink/20 bg-paper-soft hover:border-ink/50',
+                          )}
+                        >
+                          <span className="text-[12px] font-bold text-ink">Record live</span>
+                          <span className="mt-0.5 text-[10px] text-ink-soft">
+                            Record upcoming X mins then analyze
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => onHypeModeChange?.('clip_now')}
+                          className={cn(
+                            'flex flex-col items-start rounded-lg border-[1.5px] p-2.5 text-left transition',
+                            hypeMode === 'clip_now'
+                              ? 'border-ink bg-teal-soft shadow-[1px_2px_0_#211d19]'
+                              : 'border-ink/20 bg-paper-soft hover:border-ink/50',
+                          )}
+                        >
+                          <span className="text-[12px] font-bold text-ink">Clip now</span>
+                          <span className="mt-0.5 text-[10px] text-ink-soft">
+                            Rolling buffer of last 30 minutes
+                          </span>
+                        </button>
+                      </div>
+
+                      {hypeMode === 'record' ? (
+                        <div className="mt-3 flex items-center justify-between gap-3 border-t border-dashed border-ink/20 pt-2.5">
+                          <label
+                            htmlFor="hype-record-duration"
+                            className="text-[11px] font-semibold text-ink"
+                          >
+                            Record duration (minutes):
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              id="hype-record-duration"
+                              type="number"
+                              min={1}
+                              max={180}
+                              value={hypeRecordMinutes}
+                              onChange={(e) =>
+                                onHypeRecordMinutesChange?.(
+                                  Math.max(1, parseInt(e.target.value) || 1),
+                                )
+                              }
+                              className="paper-input h-8 w-20 rounded-md text-center text-[12px] font-semibold"
+                            />
+                            <span className="text-[11px] text-ink-soft">mins</span>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                      <div className="rounded-xl border-[1.5px] border-ink/30 bg-paper/60 p-3">
+                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-ink">
+                          Clip length (30-60s)
+                        </span>
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="flex-1">
+                            <span className="text-[9.5px] text-ink-soft">Min (sec)</span>
+                            <input
+                              type="number"
+                              min={15}
+                              max={hypeMaxClip - 5}
+                              value={hypeMinClip}
+                              onChange={(e) =>
+                                onHypeMinClipChange?.(Math.max(15, parseInt(e.target.value) || 30))
+                              }
+                              className="paper-input mt-1 h-8 w-full rounded-md text-center text-[12px] font-semibold"
+                            />
+                          </div>
+                          <span className="mt-4 text-ink-soft">to</span>
+                          <div className="flex-1">
+                            <span className="text-[9.5px] text-ink-soft">Max (sec)</span>
+                            <input
+                              type="number"
+                              min={hypeMinClip + 5}
+                              max={120}
+                              value={hypeMaxClip}
+                              onChange={(e) =>
+                                onHypeMaxClipChange?.(Math.min(120, parseInt(e.target.value) || 60))
+                              }
+                              className="paper-input mt-1 h-8 w-full rounded-md text-center text-[12px] font-semibold"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border-[1.5px] border-ink/30 bg-paper/60 p-3">
+                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-ink">
+                          Top moments to detect
+                        </span>
+                        <div className="mt-2 flex gap-1.5">
+                          {[1, 2, 3, 5].map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => onHypeTopNChange?.(n)}
+                              className={cn(
+                                'flex-1 rounded-lg border-[1.5px] py-1.5 text-center text-[12px] font-bold transition',
+                                hypeTopN === n
+                                  ? 'border-ink bg-tomato text-paper-soft shadow-[1px_2px_0_#211d19]'
+                                  : 'border-ink/20 bg-paper-soft text-ink hover:border-ink/50',
+                              )}
+                            >
+                              {n === 1 ? 'Top 1' : `Top ${n}`}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-[9.5px] text-ink-soft">
+                          Audio loudness + live chat velocity + speech excitement
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg bg-mustard-soft/70 px-3 py-2 text-[11px] font-medium text-ink">
+                      <Sparkles className="h-3.5 w-3.5 shrink-0 text-tomato" aria-hidden="true" />
+                      <span>
+                        Auto 1080x1920 face-aware crop · Bold synced subtitles · Sentence boundary snap
+                      </span>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      size="lg"
+                      loading={loading}
+                      iconRight={loading ? undefined : Flame}
+                      disabled={!url.trim()}
+                      className="h-12 w-full bg-tomato text-paper-soft hover:bg-tomato-bright sm:h-[3.25rem]"
+                    >
+                      {loading ? 'Finding hype moment…' : 'Find Hype Moment'}
+                    </Button>
                   </form>
                 ) : (
                   <div

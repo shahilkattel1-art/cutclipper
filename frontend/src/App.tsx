@@ -16,12 +16,14 @@ import {
   assetUrl,
   cancelJob,
   createJob,
+  createHypeJob,
   downloadAllUrl,
   errorMessage,
   getJob,
   getJobCaptions,
   isRetryable,
   previewVideo,
+  regenerateHypeMoment,
   restyleJob,
   romanizeCaptions,
   transcribeCaptions,
@@ -44,6 +46,7 @@ import type {
   NepaliScript,
   ExportQuality,
   ExportResolution,
+  HypeMode,
   Job,
   PreviewResponse,
   TranscriptResponse,
@@ -99,6 +102,11 @@ function AppContent() {
   const [generationError, setGenerationError] = useState<string | null>(null)
   const [jobId, setJobId] = useState<string | null>(null)
   const [createdJob, setCreatedJob] = useState<Job | null>(null)
+  const [hypeMode, setHypeMode] = useState<HypeMode>('vod')
+  const [hypeRecordMinutes, setHypeRecordMinutes] = useState(30)
+  const [hypeMinClip, setHypeMinClip] = useState(30)
+  const [hypeMaxClip, setHypeMaxClip] = useState(60)
+  const [hypeTopN, setHypeTopN] = useState(3)
   const [restyleParent, setRestyleParent] = useState<Job | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [cancelRequested, setCancelRequested] = useState(false)
@@ -802,6 +810,70 @@ function AppContent() {
     toast,
   ])
 
+  const startHypeJob = useCallback(async () => {
+    if (!url.trim() || generationRef.current) return
+    generationRef.current = true
+    const token = ++generationToken.current
+    setGenerating(true)
+    setGenerationError(null)
+    setCancelling(false)
+    handledStatus.current = null
+    try {
+      const newJob = await createHypeJob({
+        url: url.trim(),
+        mode: hypeMode,
+        record_minutes: hypeMode === 'record' ? hypeRecordMinutes : undefined,
+        min_clip_seconds: hypeMinClip,
+        max_clip_seconds: hypeMaxClip,
+        top_n: hypeTopN,
+        selected_rank: 1,
+        subtitles: true,
+        reframe: true,
+      })
+      if (generationToken.current !== token) {
+        void cancelJob(newJob.id).catch(() => undefined)
+        return
+      }
+      storeActiveJob(newJob)
+      setJobId(newJob.id)
+      setCreatedJob(newJob)
+      setCancelRequested(false)
+      setStep('processing')
+      toast.info('Auto Hype job started! Finding the most hyped moment…')
+    } catch (error) {
+      if (generationToken.current !== token) return
+      const message = errorMessage(error)
+      setPreviewError(message)
+      toast.error(message)
+    } finally {
+      generationRef.current = false
+      setGenerating(false)
+    }
+  }, [url, hypeMode, hypeRecordMinutes, hypeMinClip, hypeMaxClip, hypeTopN, toast])
+
+  const regenerateHype = useCallback(
+    async (rank: number) => {
+      const activeId = jobId ?? job?.id
+      if (!activeId) return
+      setGenerating(true)
+      setCancelRequested(false)
+      handledStatus.current = null
+      try {
+        const updated = await regenerateHypeMoment(activeId, rank)
+        storeActiveJob(updated)
+        setJobId(updated.id)
+        setCreatedJob(updated)
+        setStep('processing')
+        toast.info(`Re-generating moment #${rank}…`)
+      } catch (err) {
+        toast.error(errorMessage(err))
+      } finally {
+        setGenerating(false)
+      }
+    },
+    [job?.id, jobId, toast],
+  )
+
   const startCaptionRender = useCallback(async () => {
     if (!preview?.upload_id || generationRef.current) return
     const romanActive = (captionSettings.nepali_script ?? 'devanagari') === 'roman'
@@ -1260,10 +1332,21 @@ function AppContent() {
                   onClearError={clearPreviewError}
                   onContinue={goToSettings}
                   preview={preview}
-                  loading={previewLoading}
+                  loading={previewLoading || generating}
                   uploading={upload}
                   error={previewError}
                   retryable={previewRetryable}
+                  hypeMode={hypeMode}
+                  onHypeModeChange={setHypeMode}
+                  hypeRecordMinutes={hypeRecordMinutes}
+                  onHypeRecordMinutesChange={setHypeRecordMinutes}
+                  hypeMinClip={hypeMinClip}
+                  onHypeMinClipChange={setHypeMinClip}
+                  hypeMaxClip={hypeMaxClip}
+                  onHypeMaxClipChange={setHypeMaxClip}
+                  hypeTopN={hypeTopN}
+                  onHypeTopNChange={setHypeTopN}
+                  onStartHype={startHypeJob}
                 />
               ) : null}
 
@@ -1395,6 +1478,7 @@ function AppContent() {
                   }}
                   onPrepareVideo={prepareVideoWithCaptions}
                   canEditSettings={Boolean(preview)}
+                  onRegenerateHype={regenerateHype}
                 />
               ) : null}
             </motion.div>

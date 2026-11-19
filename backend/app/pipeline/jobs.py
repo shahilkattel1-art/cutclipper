@@ -43,14 +43,21 @@ from app.pipeline.selection import (
 from app.pipeline.types import ClipPlan, Transcript, Word
 from app.schemas import (
     STAGE_LABELS,
+    AspectRatio,
+    CaptionFontStyle,
+    CaptionPosition,
     CaptionSegment,
     CaptionSettings,
+    CaptionStyle,
     ClipOut,
     ClipSettings,
+    HypeMode,
+    HypeMoment,
     JobMode,
     JobOut,
     JobStage,
     JobStatus,
+    ReframeMode,
     VideoMetadata,
 )
 from app.services.audio import EnergyProfile, analyze_energy, extract_audio
@@ -114,6 +121,12 @@ class JobRecord:
     caption_words: list[Word] = field(default_factory=list)
     clip_plans: list[ClipPlan] = field(default_factory=list)
     restyle_of: str | None = None
+    hype_mode: HypeMode = HypeMode.VOD
+    hype_record_minutes: float = 30.0
+    hype_top_n: int = 1
+    hype_selected_rank: int = 1
+    hype_moments: list[HypeMoment] = field(default_factory=list)
+    hype_selected_moment: HypeMoment | None = None
 
     @property
     def job_dir(self) -> Path:
@@ -204,6 +217,10 @@ class JobManager:
         language: str | None = None,
         quality: str | None = None,
         task: str = "transcribe",
+        hype_mode: HypeMode = HypeMode.VOD,
+        hype_record_minutes: float = 30.0,
+        hype_top_n: int = 1,
+        hype_selected_rank: int = 1,
     ) -> JobRecord:
         job_id = uuid.uuid4().hex
         video = self.cached_preview(url) if url else None
@@ -224,6 +241,10 @@ class JobManager:
             video=video,
             base_dir=self.settings.jobs_dir,
             message="Queued for processing",
+            hype_mode=hype_mode,
+            hype_record_minutes=hype_record_minutes,
+            hype_top_n=hype_top_n,
+            hype_selected_rank=hype_selected_rank,
         )
         record.job_dir.mkdir(parents=True, exist_ok=True)
         (record.job_dir / "downloads").mkdir(exist_ok=True)
@@ -335,6 +356,49 @@ class JobManager:
         self.jobs[job_id] = record
         await self.queue.put(job_id)
         logger.info("caption restyle queued", extra={"job_id": job_id, "source": source.id})
+        return record
+
+    async def regenerate_hype_moment(
+        self,
+        source_job_id: str,
+        rank: int,
+    ) -> JobRecord:
+        """Queue a render for a different hype moment without re-ingesting or re-scoring."""
+        source = self.get(source_job_id)
+        if not source.hype_moments:
+            raise AppError("No hype moments are recorded for this job.", code="no_hype_moments")
+
+        job_id = uuid.uuid4().hex
+        record = JobRecord(
+            id=job_id,
+            url=source.url,
+            settings=source.settings.model_copy(deep=True),
+            mode=JobMode.HYPE,
+            video=source.video,
+            source_path=source.source_path,
+            hype_mode=source.hype_mode,
+            hype_record_minutes=source.hype_record_minutes,
+            hype_top_n=source.hype_top_n,
+            hype_selected_rank=rank,
+            hype_moments=copy.deepcopy(source.hype_moments),
+            restyle_of=source.id,
+            base_dir=self.settings.jobs_dir,
+            message=f"Queued hype moment #{rank}",
+        )
+        downloads = record.job_dir / "downloads"
+        downloads.mkdir(parents=True, exist_ok=True)
+        (record.job_dir / "work").mkdir(exist_ok=True)
+        (record.job_dir / "outputs").mkdir(exist_ok=True)
+        if source.source_path and source.source_path.exists():
+            target = downloads / f"source{source.source_path.suffix}"
+            try:
+                os.link(source.source_path, target)
+            except OSError:
+                await asyncio.to_thread(shutil.copyfile, source.source_path, target)
+            record.source_path = target
+        self.jobs[job_id] = record
+        await self.queue.put(job_id)
+        logger.info("hype moment regeneration queued", extra={"job_id": job_id, "rank": rank})
         return record
 
     def caption_lines(
@@ -496,6 +560,8 @@ class JobManager:
             ),
             is_restyle=bool(record.restyle_of),
             restyled_from=record.restyle_of,
+            hype_moments=record.hype_moments,
+            hype_selected_moment=record.hype_selected_moment,
         )
 
     def _update(
@@ -1058,6 +1124,292 @@ class JobManager:
             },
         )
 
+    async def _run_hype_pipeline(
+        self,
+        record: JobRecord,
+        metadata: VideoMetadata | None,
+        downloads: Path,
+        work: Path,
+        outputs: Path,
+        cancel: Event,
+    ) -> None:
+        """Execute Auto Hype Clip: ingestion, hype scoring, cutting, reframing, and subtitles."""
+        from app.services.hype import analyze_hype_moments
+        from app.services.ingest_live import RollingBufferRecorder, probe_stream_or_vod
+
+        # 1. Ingestion: Live recording or VOD
+        if record.hype_mode in {HypeMode.RECORD, HypeMode.CLIP_NOW}:
+            self._update(
+                record,
+                stage=JobStage.RECORDING,
+                progress=5,
+                message="Connecting to live stream",
+            )
+            recorder = RollingBufferRecorder(
+                record.url,
+                downloads,
+                self.settings,
+                buffer_minutes=self.settings.hype_buffer_minutes,
+                cancel_event=cancel,
+            )
+            if record.hype_mode == HypeMode.RECORD:
+                target_secs = max(60.0, float(record.hype_record_minutes) * 60.0)
+
+                def on_rec_progress(fraction: float, msg: str) -> None:
+                    self._update(
+                        record,
+                        stage=JobStage.RECORDING,
+                        progress=5 + fraction * 22,
+                        message=msg,
+                    )
+
+                source_path = await recorder.record_for_duration(
+                    target_secs, on_progress=on_rec_progress
+                )
+            else:  # CLIP_NOW
+                existing = recorder.get_existing_segments()
+                if not existing:
+                    self._update(
+                        record,
+                        stage=JobStage.RECORDING,
+                        progress=8,
+                        message="Capturing live feed buffer",
+                    )
+                    source_path = await recorder.record_for_duration(45.0)
+                else:
+                    self._update(
+                        record,
+                        stage=JobStage.RECORDING,
+                        progress=15,
+                        message="Packaging live buffer",
+                    )
+                    source_path = await recorder.merge_rolling_buffer()
+        else:  # VOD
+            self._update(
+                record,
+                stage=JobStage.FETCHING,
+                progress=5,
+                message="Fetching video stream for hype analysis",
+            )
+            stream_info = await probe_stream_or_vod(record.url, self.settings, cancel_event=cancel)
+            recorder = RollingBufferRecorder(
+                record.url, downloads, self.settings, cancel_event=cancel
+            )
+            if stream_info.is_live:
+                source_path = await recorder.record_for_duration(
+                    min(120.0, float(record.hype_record_minutes) * 60.0)
+                )
+            else:
+
+                def on_vod_progress(frac: float, msg: str) -> None:
+                    self._update(
+                        record,
+                        stage=JobStage.FETCHING,
+                        progress=5 + frac * 22,
+                        message=msg,
+                    )
+
+                source_path = await recorder._download_vod(on_progress=on_vod_progress)
+
+        record.source_path = source_path
+        media = await probe_media(str(source_path))
+        if record.video is None:
+            record.video = VideoMetadata(
+                title="Hype Live Clip",
+                duration=media.duration,
+                source_url=record.url,
+                width=media.width,
+                height=media.height,
+                fps=media.fps,
+                has_audio=media.has_audio,
+            )
+        else:
+            record.video = record.video.model_copy(
+                update={
+                    "duration": media.duration,
+                    "width": media.width,
+                    "height": media.height,
+                    "fps": media.fps,
+                    "has_audio": media.has_audio,
+                }
+            )
+
+        if not media.has_audio:
+            raise ProcessingError(
+                "This stream has no audio track for hype analysis.",
+                code="no_audio",
+            )
+
+        # 2. Hype scoring
+        self._update(
+            record,
+            stage=JobStage.SCORING_HYPE,
+            progress=30,
+            message="Scoring audio, chat, and voice excitement",
+        )
+
+        def on_hype_stage(msg: str, frac: float) -> None:
+            self._update(
+                record,
+                stage=JobStage.SCORING_HYPE,
+                progress=30 + frac * 28,
+                message=msg,
+            )
+
+        min_clip = (
+            float(record.settings.min_clip_seconds)
+            if record.settings.min_clip_seconds > 0
+            else float(self.settings.hype_min_clip_seconds)
+        )
+        max_clip = (
+            float(record.settings.max_clip_seconds)
+            if record.settings.max_clip_seconds > 0
+            else float(self.settings.hype_max_clip_seconds)
+        )
+
+        moments, transcript, _energy, warnings = await analyze_hype_moments(
+            source_path=source_path,
+            url=record.url,
+            duration=media.duration,
+            settings=self.settings,
+            top_n=max(record.hype_top_n, record.hype_selected_rank),
+            min_clip_seconds=min_clip,
+            max_clip_seconds=max_clip,
+            cancel_event=cancel,
+            on_stage=on_hype_stage,
+        )
+        if warnings:
+            self._update(record, warnings=warnings)
+
+        if not moments:
+            raise ProcessingError(
+                "No hype moments could be detected in this feed.",
+                code="no_hype_moments",
+            )
+
+        record.hype_moments = moments
+        selected_idx = min(len(moments) - 1, max(0, record.hype_selected_rank - 1))
+        moment = moments[selected_idx]
+        record.hype_selected_moment = moment
+
+        # 3. Cutting boundaries
+        self._update(
+            record,
+            stage=JobStage.CUTTING,
+            progress=60,
+            message=f"Cutting hype moment #{moment.rank} ({moment.duration:.1f}s)",
+        )
+        plan = ClipPlan(
+            start=moment.start,
+            end=moment.end,
+            score=moment.score,
+            origin="hype",
+        )
+        record.clip_plans = [plan]
+
+        # 4. Reframing & Subtitles (9:16 + Bold Yellow Karaoke Subtitles)
+        self._update(
+            record,
+            stage=JobStage.REFRAMING,
+            progress=68,
+            message="Reframing to 9:16 vertical",
+        )
+
+        clip_settings = record.settings.model_copy(deep=True)
+        clip_settings.aspect_ratio = AspectRatio.VERTICAL
+        clip_settings.reframe_mode = ReframeMode.SMART
+        clip_settings.captions.enabled = True
+        clip_settings.captions.word_style = CaptionStyle.KARAOKE
+        clip_settings.captions.font_style = CaptionFontStyle.BOLD
+        clip_settings.captions.color = "#FFFFFF"
+        clip_settings.captions.highlight_color = "#FACC15"
+        clip_settings.captions.outline_width = 3.5
+        clip_settings.captions.max_words = 3
+        clip_settings.captions.position = CaptionPosition.BOTTOM
+
+        self._ensure_caption_script_font(record, " ".join(w.text for w in transcript.words[:200]))
+        title_slug = safe_title_slug(record.video.title or "hype_clip")
+
+        renderer = ClipRenderer(
+            source=source_path,
+            media=media,
+            settings=self.settings,
+            clip_settings=clip_settings,
+            work_dir=work,
+            output_dir=outputs,
+            cancel_event=cancel,
+        )
+
+        # 5. Rendering
+        def on_render_stage(stage_name: JobStage, msg: str, frac: float) -> None:
+            self._update(record, stage=stage_name, progress=70 + frac * 24, message=msg)
+
+        def on_render_progress(frac: float) -> None:
+            self._update(record, stage=JobStage.RENDERING, progress=72 + frac * 22)
+
+        rendered = await renderer.render(
+            plan,
+            index=1,
+            transcript=transcript,
+            on_stage=on_render_stage,
+            on_progress=on_render_progress,
+            title_slug=title_slug,
+        )
+
+        # 6. Packaging & Score Breakdown JSON
+        self._update(
+            record,
+            stage=JobStage.PACKAGING,
+            progress=96,
+            message="Writing hype score breakdown",
+        )
+        json_path = outputs / f"{title_slug}_hype_{moment.rank}.json"
+        metadata_dict = {
+            "title": record.video.title,
+            "url": record.url,
+            "rank": moment.rank,
+            "peak_time": moment.peak_time,
+            "start": moment.start,
+            "end": moment.end,
+            "duration": moment.duration,
+            "hype_score": moment.score,
+            "breakdown": {
+                "audio": moment.breakdown.audio,
+                "chat": moment.breakdown.chat,
+                "speech": moment.breakdown.speech,
+                "total": moment.breakdown.total,
+            },
+            "all_moments": [m.model_dump() for m in moments],
+            "warnings": record.warnings,
+        }
+        json_path.write_text(json.dumps(metadata_dict, indent=2), encoding="utf-8")
+
+        record.clips = [
+            StoredClip(
+                id=f"{moment.rank:02d}",
+                index=1,
+                start=plan.start,
+                end=plan.end,
+                score=moment.score,
+                width=rendered.width,
+                height=rendered.height,
+                filename=rendered.filename,
+                video_path=rendered.video_path,
+                thumbnail_path=rendered.thumbnail_path,
+                file_size=rendered.video_path.stat().st_size,
+            )
+        ]
+        self._finish(record, message=f"Hype clip ready (Score: {moment.score:.0f}/100)")
+        logger.info(
+            "hype job complete",
+            extra={
+                "duration": media.duration,
+                "peak_time": moment.peak_time,
+                "score": moment.score,
+                "rank": moment.rank,
+            },
+        )
+
     async def _run_pipeline(self, record: JobRecord) -> None:
         cancel = record.cancel_event
         record.job_dir.mkdir(parents=True, exist_ok=True)
@@ -1089,6 +1441,10 @@ class JobManager:
 
         if record.mode == JobMode.CAPTIONS:
             await self._run_caption_pipeline(record, metadata, downloads, work, outputs, cancel)
+            return
+
+        if record.mode == JobMode.HYPE:
+            await self._run_hype_pipeline(record, metadata, downloads, work, outputs, cancel)
             return
 
         if metadata.duration > 0:

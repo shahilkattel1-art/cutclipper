@@ -7,6 +7,8 @@ import {
   Download,
   ExternalLink,
   FileText,
+  Flame,
+  FolderOpen,
   Info,
   Palette,
   Pause,
@@ -27,10 +29,18 @@ import type {
   Job,
   NepaliScript,
 } from '../types/api'
-import { assetUrl, downloadAllUrl, errorMessage, jobSourceUrl } from '../lib/api'
+import {
+  assetUrl,
+  downloadAllUrl,
+  errorMessage,
+  hypeMetadataUrl,
+  jobSourceUrl,
+  openJobFolder,
+} from '../lib/api'
 import { downloadSrt } from '../lib/srt'
 import {
   clamp,
+  cn,
   formatBytes,
   formatDuration,
   formatTimecode,
@@ -71,6 +81,7 @@ interface ResultsStepProps {
     segments: CaptionSegment[],
     secondarySegments?: CaptionSegment[],
   ) => Promise<Job>
+  onRegenerateHype?: (rank: number) => void
 }
 
 export function ResultsStep({
@@ -89,6 +100,7 @@ export function ResultsStep({
   onCaptionStyleChange,
   onScriptChange,
   onPrepareVideo,
+  onRegenerateHype,
 }: ResultsStepProps) {
   const toast = useToast()
   const [editingCaptions, setEditingCaptions] = useState(false)
@@ -118,6 +130,9 @@ export function ResultsStep({
   const clips = [...job.clips].sort((a, b) => a.index - b.index)
   const totalSize = clips.reduce((sum, clip) => sum + clip.file_size, 0)
   const captionMode = job.mode === 'captions'
+  const hypeMode = job.mode === 'hype'
+  const hypeMoment = job.hype_selected_moment
+  const hypeMoments = job.hype_moments ?? []
   const primaryClip = clips[0]
   const activePreviewClip = clips.find((clip) => clip.id === previewClipId) ?? primaryClip
   const sourceUrl = jobSourceUrl(job.id)
@@ -241,7 +256,11 @@ export function ResultsStep({
           </div>
           <div className="mt-4 flex flex-wrap items-end gap-x-4">
             <h1 className="font-display text-4xl font-semibold tracking-[-0.055em] text-ink sm:text-[3.4rem]">
-              {captionMode ? (
+              {hypeMode ? (
+                <>
+                  Your hype clip <span className="text-gradient">is ready.</span>
+                </>
+              ) : captionMode ? (
                 <>
                   Your video <span className="text-gradient">is captioned.</span>
                 </>
@@ -252,28 +271,57 @@ export function ResultsStep({
               )}
             </h1>
             <span className="mb-1.5 hidden -rotate-2 font-hand text-[19px] text-ink-soft sm:inline">
-              fresh off the cutting mat
+              {hypeMode ? 'peak energy captured' : 'fresh off the cutting mat'}
             </span>
           </div>
           <p className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12px] font-medium text-ink-soft">
             <span className="max-w-lg truncate">{job.video?.title ?? 'Your video'}</span>
             <span className="hidden h-3 border-l border-dashed border-ink/30 sm:block" />
             <span className="text-ink-soft">
-              {captionMode
-                ? `${formatDuration(primaryClip?.duration ?? 0)} · captions burned in`
-                : `${clips.length} ${pluralize(clips.length, 'clip')} · ${formatDuration(
-                    clips.reduce((sum, clip) => sum + clip.duration, 0),
-                  )} total`}
+              {hypeMode
+                ? `Rank #${hypeMoment?.rank ?? 1} · Hype score: ${Math.round(hypeMoment?.score ?? 0)}/100 · ${formatDuration(primaryClip?.duration ?? 0)}`
+                : captionMode
+                  ? `${formatDuration(primaryClip?.duration ?? 0)} · captions burned in`
+                  : `${clips.length} ${pluralize(clips.length, 'clip')} · ${formatDuration(
+                      clips.reduce((sum, clip) => sum + clip.duration, 0),
+                    )} total`}
             </span>
           </p>
         </div>
         <div className="grid w-full grid-cols-2 gap-2.5 sm:flex sm:w-auto sm:flex-wrap sm:items-center lg:justify-end">
+          {hypeMode ? (
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await openJobFolder(job.id)
+                    toast.success('Opening output folder on your computer.')
+                  } catch {
+                    toast.info('Clips are stored in the server outputs directory.')
+                  }
+                }}
+                icon={FolderOpen}
+              >
+                Open folder
+              </Button>
+              <a
+                href={hypeMetadataUrl(job.id)}
+                download
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border-[1.5px] border-ink bg-paper px-3 text-[11px] font-semibold text-ink shadow-[1px_2px_0_#211d19] transition hover:-translate-y-px hover:bg-mustard-soft"
+              >
+                <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+                Score JSON
+              </a>
+            </>
+          ) : null}
           {onEditCaptions ? (
             <Button variant="secondary" size="sm" onClick={onEditCaptions} icon={Captions}>
               Edit captions
             </Button>
           ) : null}
-          {!captionMode ? (
+          {!captionMode && !hypeMode ? (
             <>
               <Button
                 variant="ghost"
@@ -313,14 +361,20 @@ export function ResultsStep({
           <button
             type="button"
             onClick={() =>
-              void downloadLatest(captionMode ? { clipIndex: primaryClip?.index } : { zip: true })
+              void downloadLatest(
+                captionMode || hypeMode ? { clipIndex: primaryClip?.index } : { zip: true },
+              )
             }
             disabled={preparingVideo}
             className="col-span-2 inline-flex h-10 items-center justify-center gap-2 rounded-xl border-[1.5px] border-ink bg-tomato px-4 text-[12.5px] font-semibold text-paper-soft shadow-[3px_4px_0_#211d19] transition hover:-translate-y-0.5 hover:bg-tomato-bright hover:shadow-[4px_5px_0_#211d19] active:translate-y-[3px] active:shadow-none disabled:cursor-wait disabled:opacity-70 disabled:hover:translate-y-0 sm:col-span-1"
           >
             <Download className="h-4 w-4" aria-hidden="true" />
-            {preparingVideo ? 'Preparing…' : captionMode ? 'Download video' : 'Download all'}
-            {captionMode ? null : (
+            {preparingVideo
+              ? 'Preparing…'
+              : captionMode || hypeMode
+                ? 'Download clip'
+                : 'Download all'}
+            {captionMode || hypeMode ? null : (
               <span className="rounded bg-black/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">
                 ZIP
               </span>
@@ -353,6 +407,86 @@ export function ResultsStep({
           {captionMode ? 'Hover to preview the full video' : 'Hover any clip to preview'}
         </span>
       </motion.div>
+
+      {hypeMode && hypeMoment ? (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="my-5 rounded-2xl border-[1.5px] border-ink bg-paper-soft p-4 shadow-[3px_4px_0_#211d19]"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border-[1.5px] border-ink bg-tomato text-paper-soft shadow-[2px_2px_0_#211d19]">
+                <Flame className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[14px] font-bold text-ink">
+                    Peak Moment #{hypeMoment.rank} (at {formatTimecode(hypeMoment.peak_time)})
+                  </span>
+                  <span className="rounded-full border border-ink/30 bg-tomato-soft px-2.5 py-0.5 text-[10.5px] font-bold text-tomato">
+                    Score: {Math.round(hypeMoment.score)} / 100
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[11px] text-ink-soft">
+                  Clip range: {formatTimecode(hypeMoment.start)} – {formatTimecode(hypeMoment.end)} (
+                  {Math.round(hypeMoment.duration)}s) · centered on peak with build-up
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-lg border border-ink/20 bg-paper px-2.5 py-1 text-[11px] font-semibold text-ink shadow-[1px_1px_0_rgba(33,29,25,0.08)]">
+                🔊 Audio loudness:{' '}
+                <strong className="text-tomato">
+                  {Math.round(hypeMoment.breakdown.audio * 100)}%
+                </strong>
+              </span>
+              <span className="rounded-lg border border-ink/20 bg-paper px-2.5 py-1 text-[11px] font-semibold text-ink shadow-[1px_1px_0_rgba(33,29,25,0.08)]">
+                💬 Chat velocity:{' '}
+                <strong className="text-teal">
+                  {Math.round(hypeMoment.breakdown.chat * 100)}%
+                </strong>
+              </span>
+              <span className="rounded-lg border border-ink/20 bg-paper px-2.5 py-1 text-[11px] font-semibold text-ink shadow-[1px_1px_0_rgba(33,29,25,0.08)]">
+                🗣️ Speech excitement:{' '}
+                <strong className="text-mustard-deep">
+                  {Math.round(hypeMoment.breakdown.speech * 100)}%
+                </strong>
+              </span>
+            </div>
+          </div>
+
+          {hypeMoments.length > 1 ? (
+            <div className="mt-3.5 border-t border-dashed border-ink/20 pt-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-ink-soft">
+                  Re-generate with a different moment:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {hypeMoments.map((m) => (
+                    <button
+                      key={m.rank}
+                      type="button"
+                      onClick={() => onRegenerateHype?.(m.rank)}
+                      disabled={m.rank === hypeMoment.rank}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-lg border-[1.5px] px-2.5 py-1 text-[11px] font-bold transition',
+                        m.rank === hypeMoment.rank
+                          ? 'cursor-default border-ink bg-mustard-soft text-ink opacity-60'
+                          : 'border-ink/30 bg-paper text-ink shadow-[1px_2px_0_#211d19] hover:-translate-y-px hover:border-ink hover:bg-mustard-soft active:translate-y-px active:shadow-none',
+                      )}
+                    >
+                      <span>Rank #{m.rank}</span>
+                      <span className="text-[9.5px] text-ink-soft">({Math.round(m.score)} pts)</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </motion.div>
+      ) : null}
 
       {activePreviewClip ? (
         <div ref={previewRef} className="scroll-mt-24">

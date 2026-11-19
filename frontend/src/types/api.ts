@@ -29,15 +29,19 @@ export type CaptionTextCase = 'none' | 'uppercase' | 'lowercase'
 export type NepaliScript = 'devanagari' | 'roman'
 export type TransitionStyle = 'fade' | 'zoom' | 'slide' | 'whip_pan'
 export type CaptionFont = string
-export type JobMode = 'clips' | 'captions'
+export type JobMode = 'clips' | 'captions' | 'hype'
+export type HypeMode = 'record' | 'clip_now' | 'vod'
 
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
 export type JobStage =
   | 'queued'
+  | 'recording'
   | 'fetching'
   | 'probing'
   | 'transcribing'
   | 'finding_highlights'
+  | 'scoring_hype'
+  | 'cutting'
   | 'reframing'
   | 'captioning'
   | 'rendering'
@@ -209,6 +213,38 @@ export interface Job {
   download_all_url: string | null
   is_restyle: boolean
   restyled_from: string | null
+  hype_moments?: HypeMoment[]
+  hype_selected_moment?: HypeMoment | null
+}
+
+export interface HypeScoreBreakdown {
+  audio: number
+  chat: number
+  speech: number
+  total: number
+}
+
+export interface HypeMoment {
+  rank: number
+  peak_time: number
+  start: number
+  end: number
+  duration: number
+  score: number
+  breakdown: HypeScoreBreakdown
+}
+
+export interface HypeRequest {
+  url: string
+  mode: HypeMode
+  record_minutes?: number
+  min_clip_seconds?: number
+  max_clip_seconds?: number
+  top_n?: number
+  selected_rank?: number
+  subtitles?: boolean
+  reframe?: boolean
+  language?: string | null
 }
 
 export interface ApiErrorBody {
