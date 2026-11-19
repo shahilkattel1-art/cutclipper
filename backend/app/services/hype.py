@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import socket
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -52,6 +54,7 @@ def fetch_chat_messages(
     duration: float,
     *,
     cancel_event: Event | None = None,
+    timeout: float = 12.0,
 ) -> tuple[list[ChatMessage], bool, list[str]]:
     """Fetch live or VOD chat messages using chat-downloader.
 
@@ -66,11 +69,23 @@ def fetch_chat_messages(
         warnings.append("chat-downloader is not installed. Chat scoring will be skipped.")
         return [], False, warnings
 
+    old_timeout = socket.getdefaulttimeout()
     try:
+        socket.setdefaulttimeout(8.0)
         downloader = ChatDownloader()
-        chat_iter = downloader.get_chat(url)
+        chat_iter = downloader.get_chat(
+            url,
+            timeout=timeout,
+            inactivity_timeout=4.0,
+            max_attempts=2,
+            retry_timeout=1.0,
+            message_receive_timeout=0.1,
+        )
+        start_time = time.monotonic()
         for item in chat_iter:
             if cancel_event and cancel_event.is_set():
+                break
+            if time.monotonic() - start_time > timeout:
                 break
             # time_in_seconds or time_offset
             time_offset = item.get("time_in_seconds")
@@ -106,14 +121,16 @@ def fetch_chat_messages(
                 )
             )
             # Limit total chat messages to avoid excessive memory
-            if len(messages) >= 50_000:
+            if len(messages) >= 20_000:
                 break
     except Exception as exc:
         logger.warning("could not fetch live chat: %s", exc)
         warnings.append(f"Live chat could not be retrieved: {exc}. Using audio and speech scoring.")
         return [], False, warnings
+    finally:
+        socket.setdefaulttimeout(old_timeout)
 
-    return messages, True, warnings
+    return messages, bool(messages), warnings
 
 
 def _parse_time_text(text: str) -> float | None:
@@ -346,13 +363,31 @@ async def analyze_hype_moments(
     # 3. Live chat activity
     if on_stage:
         on_stage("Fetching live chat activity & hype emojis", 0.55)
-    messages, chat_available, chat_warnings = await asyncio.to_thread(
-        fetch_chat_messages,
-        url,
-        duration,
-        cancel_event=cancel_event,
-    )
-    warnings.extend(chat_warnings)
+    try:
+        messages, chat_available, chat_warnings = await asyncio.wait_for(
+            asyncio.to_thread(
+                fetch_chat_messages,
+                url,
+                duration,
+                cancel_event=cancel_event,
+                timeout=12.0,
+            ),
+            timeout=15.0,
+        )
+        warnings.extend(chat_warnings)
+    except TimeoutError:
+        logger.info("live chat fetching timed out; proceeding with audio + speech scoring")
+        warnings.append(
+            "Live chat fetching timed out. Scored hype using audio and speech excitement."
+        )
+        messages, chat_available = [], False
+    except Exception as exc:
+        logger.info("live chat unavailable (%s); proceeding with audio + speech scoring", exc)
+        warnings.append("Live chat unavailable. Scored hype using audio and speech excitement.")
+        messages, chat_available = [], False
+
+    if not messages:
+        chat_available = False
 
     # Adjust weights if chat was disabled
     w_audio = settings.hype_weight_audio
