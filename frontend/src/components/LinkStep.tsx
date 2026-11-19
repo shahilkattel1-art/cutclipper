@@ -738,7 +738,12 @@ export function LinkStep({
                 <p className="font-medium leading-relaxed">{error}</p>
               </div>
               {retryable && url.trim() ? (
-                <Button variant="secondary" size="sm" onClick={onPreview} loading={loading}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={mode === 'hype' ? onStartHype : onPreview}
+                  loading={loading}
+                >
                   Try again
                 </Button>
               ) : null}

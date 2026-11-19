@@ -360,7 +360,7 @@ def romanize_captions(payload: RomanizeSegmentsRequest) -> RomanizeSegmentsRespo
 @router.post("/preview", response_model=PreviewResponse)
 async def preview_video(payload: PreviewRequest, request: Request) -> PreviewResponse:
     settings = _settings(request)
-    normalized = await validate_remote_url(payload.url)
+    normalized = await validate_remote_url(payload.url, allow_local=settings.allow_local_urls)
     metadata = await fetch_metadata(normalized, settings)
     _manager(request).cache_preview(metadata)
     logger.info(
@@ -373,6 +373,7 @@ async def preview_video(payload: PreviewRequest, request: Request) -> PreviewRes
 @router.post("/jobs", response_model=JobOut, status_code=202)
 async def create_job(payload: CreateJobRequest, request: Request) -> JobOut:
     manager = _manager(request)
+    settings = _settings(request)
     if payload.upload_id:
         record = await manager.create_job(
             None,
@@ -390,7 +391,9 @@ async def create_job(payload: CreateJobRequest, request: Request) -> JobOut:
             hype_selected_rank=payload.hype_selected_rank,
         )
     else:
-        normalized = await validate_remote_url(payload.url or "")
+        normalized = await validate_remote_url(
+            payload.url or "", allow_local=settings.allow_local_urls
+        )
         record = await manager.create_job(
             normalized,
             payload.settings,
@@ -410,14 +413,15 @@ async def create_job(payload: CreateJobRequest, request: Request) -> JobOut:
 async def create_hype_job(payload: HypeRequest, request: Request) -> JobOut:
     """Create an Auto Hype Clip job for a YouTube live stream or VOD."""
     manager = _manager(request)
-    normalized = await validate_remote_url(payload.url)
-    settings = ClipSettings()
-    settings.min_clip_seconds = int(payload.min_clip_seconds)
-    settings.max_clip_seconds = int(payload.max_clip_seconds)
+    settings = _settings(request)
+    normalized = await validate_remote_url(payload.url, allow_local=settings.allow_local_urls)
+    clip_settings = ClipSettings()
+    clip_settings.min_clip_seconds = int(payload.min_clip_seconds)
+    clip_settings.max_clip_seconds = int(payload.max_clip_seconds)
 
     record = await manager.create_job(
         normalized,
-        settings,
+        clip_settings,
         mode=JobMode.HYPE,
         language=payload.language,
         hype_mode=payload.mode,

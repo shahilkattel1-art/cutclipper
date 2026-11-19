@@ -90,6 +90,11 @@ class Settings(BaseSettings):
         ]
     )
 
+    allow_local_urls: bool = Field(
+        default=True,
+        description="Allow localhost and private network URLs in development and testing.",
+    )
+
     # Auto Hype Clip configuration
     hype_buffer_minutes: int = Field(default=30, ge=1, le=180)
     hype_segment_seconds: int = Field(default=10, ge=2, le=60)

@@ -87,13 +87,21 @@ async function request<T>(path: string, init: RequestInit = {}, timeoutMs = 30_0
           details?: Record<string, unknown>
         }
       } | null
+      const rawDetail = (payload as Record<string, unknown>)?.detail
+      const detailMsg =
+        typeof rawDetail === 'string'
+          ? rawDetail
+          : Array.isArray(rawDetail) && rawDetail[0]?.msg
+            ? String(rawDetail[0].msg)
+            : null
+      const directMsg = (payload as Record<string, unknown>)?.message as string | undefined
       const statusMsg =
         response.status === 502 || response.status === 503 || response.status === 504
           ? 'The backend is starting up or temporarily unavailable — please wait a moment and try again.'
           : `The server returned ${response.status}.`
-      throw new ApiError(body?.error?.message || statusMsg, {
+      throw new ApiError(body?.error?.message || directMsg || detailMsg || statusMsg, {
         code: body?.error?.code,
-        retryable: body?.error?.retryable ?? (response.status >= 500),
+        retryable: body?.error?.retryable ?? response.status >= 500,
         status: response.status,
         details: body?.error?.details,
       })
@@ -340,7 +348,7 @@ export function isRetryable(error: unknown): boolean {
 }
 
 export async function createHypeJob(payload: HypeRequest): Promise<Job> {
-  return request<Job>('/hype', { method: 'POST', body: JSON.stringify(payload) }, 30_000)
+  return request<Job>('/hype', { method: 'POST', body: JSON.stringify(payload) }, 180_000)
 }
 
 export async function regenerateHypeMoment(jobId: string, rank: number): Promise<Job> {
