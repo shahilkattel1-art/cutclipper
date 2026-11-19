@@ -540,6 +540,7 @@ class VideoMetadata(BaseModel):
     height: int | None = None
     fps: float | None = None
     has_audio: bool | None = None
+    is_live: bool = False
 
 
 class ClipOut(BaseModel):

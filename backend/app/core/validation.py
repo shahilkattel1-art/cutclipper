@@ -15,6 +15,10 @@ _DOMAIN_RE = re.compile(
     r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?::\d{1,5})?(?:[/?#].*)?$",
     re.IGNORECASE,
 )
+_LOCAL_HOST_RE = re.compile(
+    r"^(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d{1,5})?(?:[/?#].*)?$",
+    re.IGNORECASE,
+)
 _BLOCKED_HOSTS = {
     "localhost",
     "localhost.localdomain",
@@ -49,6 +53,8 @@ def normalize_url(raw: str) -> str:
     if not _SCHEME_RE.match(value):
         if _DOMAIN_RE.match(value):
             value = f"https://{value}"
+        elif _LOCAL_HOST_RE.match(value):
+            value = f"http://{value}"
         else:
             raise URLValidationError(
                 "Enter a full link starting with http:// or https://, for example "
@@ -75,11 +81,42 @@ def _is_public_ip(address: str) -> bool:
     )
 
 
+def _is_local_host(hostname: str) -> bool:
+    host = hostname.rstrip(".").lower()
+    if host in {
+        "localhost",
+        "localhost.localdomain",
+        "127.0.0.1",
+        "0.0.0.0",
+        "::1",
+        "ip6-localhost",
+        "ip6-loopback",
+    }:
+        return True
+    if host.endswith((".localhost", ".local", ".localdomain", ".lan", ".home")):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+            ip = ip.ipv4_mapped
+        return bool(ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_unspecified)
+    except ValueError:
+        return False
+
+
 def is_local_allowed() -> bool:
     import os
 
-    allow = os.environ.get("CUTCLIPPER_ALLOW_LOCAL_URLS", "false").lower()
-    return allow in {"1", "true", "yes", "on"}
+    allow = os.environ.get("CUTCLIPPER_ALLOW_LOCAL_URLS")
+    if allow is not None:
+        return allow.lower() in {"1", "true", "yes", "on"}
+    try:
+        from app.config import get_settings
+
+        return bool(get_settings().allow_local_urls)
+    except Exception:
+        env = os.environ.get("CUTCLIPPER_ENVIRONMENT", "development").lower()
+        return env != "production"
 
 
 def validate_public_url_shape(raw: str, *, allow_local: bool = False) -> str:
@@ -105,7 +142,11 @@ def validate_public_url_shape(raw: str, *, allow_local: bool = False) -> str:
         raise URLValidationError("That hostname is not valid.") from exc
     if len(hostname) > 253 or not hostname:
         raise URLValidationError("That hostname is not valid.")
-    if not allow_local and (hostname in _BLOCKED_HOSTS or hostname.endswith(_BLOCKED_SUFFIXES)):
+
+    is_local = _is_local_host(hostname)
+    if (not allow_local or not is_local) and (
+        hostname in _BLOCKED_HOSTS or hostname.endswith(_BLOCKED_SUFFIXES)
+    ):
         raise URLValidationError("Local and private network links are not supported.")
 
     try:
@@ -126,7 +167,7 @@ def validate_public_url_shape(raw: str, *, allow_local: bool = False) -> str:
         pass
     if not allow_local and is_ip_literal and not _is_public_ip(hostname):
         raise URLValidationError("Local and private network links are not supported.")
-    if not allow_local and not is_ip_literal and "." not in hostname:
+    if (not allow_local or not is_local) and not is_ip_literal and "." not in hostname:
         raise URLValidationError("Enter a public video URL with a valid domain name.")
 
     # Rebuild without credentials or fragments; fragments never reach a server.
@@ -142,32 +183,41 @@ def validate_public_url_shape(raw: str, *, allow_local: bool = False) -> str:
     return normalized
 
 
-def _public_addresses(hostname: str, port: int) -> set[str]:
+def _public_addresses(hostname: str, port: int, *, allow_local: bool = False) -> set[str]:
     try:
         results = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
     except (socket.gaierror, OSError) as exc:
+        if allow_local:
+            return set()
         raise URLValidationError(
             "We could not resolve that hostname. Check the link and your connection."
         ) from exc
     addresses = {entry[4][0] for entry in results if entry[4]}
-    if not addresses or any(not _is_public_ip(address) for address in addresses):
+    if not allow_local and (
+        not addresses or any(not _is_public_ip(address) for address in addresses)
+    ):
         raise URLValidationError("Local and private network links are not supported.")
     return addresses
 
 
 async def validate_remote_url(
-    raw: str, *, timeout: float = 6.0, allow_local: bool = False
+    raw: str, *, timeout: float = 6.0, allow_local: bool | None = None
 ) -> str:
     """Validate the URL shape and ensure every DNS answer is publicly routable."""
+
+    if allow_local is None:
+        allow_local = is_local_allowed()
 
     value = validate_public_url_shape(raw, allow_local=allow_local)
     parts = urlsplit(value)
     hostname = parts.hostname
     assert hostname is not None
-    if allow_local and hostname in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}:
+    if allow_local and _is_local_host(hostname):
         return value
     if _is_ip_literal(hostname):
-        return value
+        if allow_local or _is_public_ip(hostname):
+            return value
+        raise URLValidationError("Local and private network links are not supported.")
 
     loop = asyncio.get_running_loop()
     try:
@@ -192,19 +242,28 @@ async def validate_remote_url(
     return value
 
 
-def validate_remote_url_sync(raw: str, allow_local: bool = False) -> str:
+def validate_remote_url_sync(raw: str, *, allow_local: bool | None = None) -> str:
     """Synchronous variant for probing redirect targets off the event loop."""
+
+    if allow_local is None:
+        allow_local = is_local_allowed()
 
     value = validate_public_url_shape(raw, allow_local=allow_local)
     parts = urlsplit(value)
     hostname = parts.hostname
     assert hostname is not None
-    if allow_local and hostname in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}:
+    if allow_local and _is_local_host(hostname):
         return value
     if _is_ip_literal(hostname):
-        return value
+        if allow_local or _is_public_ip(hostname):
+            return value
+        raise URLValidationError("Local and private network links are not supported.")
     if not allow_local:
-        _public_addresses(hostname, parts.port or (443 if parts.scheme == "https" else 80))
+        _public_addresses(
+            hostname,
+            parts.port or (443 if parts.scheme == "https" else 80),
+            allow_local=allow_local,
+        )
     return value
 
 

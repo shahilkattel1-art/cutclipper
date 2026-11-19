@@ -310,11 +310,13 @@ def _metadata_from_info(
             raise MediaFetchError("That playlist does not contain a video.", retryable=False)
         info = entries[0]
     live_status = info.get("live_status")
-    if info.get("is_live") or live_status in {"is_live", "is_upcoming"}:
+    is_live = bool(info.get("is_live") or live_status == "is_live")
+    is_upcoming = bool(live_status == "is_upcoming")
+    if is_upcoming:
         raise MediaFetchError(
-            "Live streams aren't supported. Try a finished video or VOD.",
-            code="live_stream",
-            retryable=False,
+            "This stream is scheduled for the future and is not live yet.",
+            code="stream_upcoming",
+            retryable=True,
         )
 
     raw_duration = info.get("duration")
@@ -330,7 +332,7 @@ def _metadata_from_info(
     if info.get("acodec"):
         has_audio = info.get("acodec") != "none"
 
-    if duration <= 0:
+    if duration <= 0 and not is_live:
         try:
             safe_url = _resolve_public_redirects(normalized_url)
             media_info = probe_media_sync(safe_url, timeout=45, max_redirects=0)
@@ -342,12 +344,11 @@ def _metadata_from_info(
         except Exception as exc:
             logger.info("duration probe fallback failed", extra={"error": str(exc)})
             raise MediaFetchError(
-                "The video duration could not be determined. It may be a live stream "
-                "or an unsupported format.",
+                "The video duration could not be determined. It may be an unsupported format.",
                 retryable=False,
             ) from exc
 
-    if duration > settings.max_video_duration_seconds:
+    if not is_live and duration > settings.max_video_duration_seconds:
         maximum_hours = settings.max_video_duration_seconds / 3600
         raise MediaFetchError(
             f"This video is {duration / 60:.0f} minutes long. CutClipper supports videos up "
@@ -368,6 +369,7 @@ def _metadata_from_info(
         height=height,
         fps=round(fps, 3) if fps else None,
         has_audio=has_audio,
+        is_live=is_live,
     )
 
 
@@ -519,7 +521,9 @@ async def _download_direct_http(
                                 retryable=False,
                             )
                         current_url = urljoin(current_url, location)
-                        await validate_remote_url(current_url)
+                        await validate_remote_url(
+                            current_url, allow_local=settings.allow_local_urls
+                        )
                         continue
                     break
                 else:

@@ -737,7 +737,19 @@ export function LinkStep({
                 <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-tomato" aria-hidden="true" />
                 <p className="font-medium leading-relaxed">{error}</p>
               </div>
-              {retryable && url.trim() ? (
+              {error.toLowerCase().includes('live stream') && mode !== 'hype' ? (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    onModeChange('hype')
+                    onClearError()
+                  }}
+                  icon={Flame}
+                >
+                  Switch to Auto Hype Clip
+                </Button>
+              ) : retryable && url.trim() ? (
                 <Button
                   variant="secondary"
                   size="sm"

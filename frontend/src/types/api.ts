@@ -108,6 +108,7 @@ export interface VideoMetadata {
   height: number | null
   fps: number | null
   has_audio: boolean | null
+  is_live?: boolean
 }
 
 export interface PreviewResponse extends VideoMetadata {

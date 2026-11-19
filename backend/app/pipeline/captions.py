@@ -562,6 +562,15 @@ def _word_event_entrance_tag(
     return "{" + base + "}"
 
 
+@dataclass(slots=True)
+class BoxRectangle:
+    drawing: str
+    box_left: int
+    top: int
+    width: int
+    height: int
+
+
 def _box_rectangle(
     group: _Group,
     active_word: int,
@@ -577,11 +586,12 @@ def _box_rectangle(
     alignment: int,
     colour: str,
     leading_height: float = 0.0,
-) -> str | None:
+) -> BoxRectangle | None:
     """Draw a marker rectangle behind the active word.
 
-    Coordinates are relative to the ASS anchor (x, y) with \\an7 so the
-    rectangle matches the text bounds and adapts to all fonts and font sizes.
+    Coordinates are defined in local box coordinates (0, 0) to (box_w, box_h)
+    and anchored with \\an7 at (box_left, top) so the box matches the active
+    word's exact bounds across all fonts, word lengths, and font sizes.
     """
 
     metrics = get_font_metrics(font_name, bold=bold, italic=italic)
@@ -601,8 +611,8 @@ def _box_rectangle(
         + letter_spacing
         + word_spacing
     )
-    pad_x = max(3.0, font_size * 0.08)
-    pad_y = max(3.0, font_size * 0.08)
+    pad_x = max(6.0, font_size * 0.16)
+    pad_y = max(4.0, font_size * 0.12)
     num_lines = len(group.lines)
 
     flat_index = 0
@@ -641,13 +651,15 @@ def _box_rectangle(
             if flat_index == active_word:
                 box_left = curr_x - pad_x
                 box_right = curr_x + width + pad_x
+                box_w = max(4.0, box_right - box_left)
+                box_h = max(4.0, bottom - top)
 
-                r = min(pad_x, pad_y, max(2.0, font_size * 0.06))
+                r = min(box_w / 3.0, box_h / 3.0, max(3.0, font_size * 0.08))
                 k = 0.55228475 * r
-                x0 = box_left - x
-                y0 = top - y
-                x1 = box_right - x
-                y1 = bottom - y
+                x0 = 0.0
+                y0 = 0.0
+                x1 = box_w
+                y1 = box_h
 
                 drawing = (
                     f"m {round(x0+r)} {round(y0)} "
@@ -660,7 +672,14 @@ def _box_rectangle(
                     f"l {round(x0)} {round(y0+r)} "
                     f"b {round(x0)} {round(y0+r-k)} {round(x0+r-k)} {round(y0)} {round(x0+r)} {round(y0)}"
                 )
-                return f"{{\\p1\\c{_ass_inline_colour(colour)}\\alpha&H4D&}}" f"{drawing}" "{\\p0}"
+                payload = f"{{\\p1\\c{_ass_inline_colour(colour)}\\alpha&H4D&\\bord0\\shad0}}{drawing}{{\\p0}}"
+                return BoxRectangle(
+                    drawing=payload,
+                    box_left=round(box_left),
+                    top=round(top),
+                    width=round(box_w),
+                    height=round(box_h),
+                )
             curr_x += width + gap_width
             flat_index += 1
     return None
@@ -969,10 +988,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         leading_height=leading_height,
                     )
                     if rectangle:
+                        drawing_tag = f"{{\\an7\\pos({rectangle.box_left},{rectangle.top})\\q0}}"
                         add_event(
                             word.start,
                             _event_end(flat_words, word_index, hold_end),
-                            rectangle,
+                            rectangle.drawing,
                             tag=drawing_tag,
                             layer=0,
                         )
@@ -1021,12 +1041,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         add_event(
                             start,
                             end,
-                            rectangle,
+                            rectangle.drawing,
                             tag=_word_event_entrance_tag(
                                 line_style,
                                 elapsed=elapsed,
-                                x=x,
-                                y=y,
+                                x=rectangle.box_left,
+                                y=rectangle.top,
                                 alignment=alignment,
                                 height=height,
                                 drawing=True,

@@ -97,3 +97,45 @@ def test_missing_youtube_formats_explains_the_solver_dependency() -> None:
     assert error.code == "formats_unavailable"
     assert "yt-dlp-ejs" in error.message
     assert "Node.js" in error.message
+
+
+def test_metadata_supports_live_streams(tmp_path: Path) -> None:
+    from app.services.downloader import _metadata_from_info
+
+    settings = _settings(tmp_path)
+    info = {
+        "id": "live123",
+        "title": "Exciting Live Stream",
+        "is_live": True,
+        "live_status": "is_live",
+        "uploader": "StreamerOne",
+        "width": 1920,
+        "height": 1080,
+        "fps": 60,
+        "acodec": "mp4a.40.2",
+    }
+    meta = _metadata_from_info(
+        info, normalized_url="https://youtube.com/watch?v=live123", settings=settings
+    )
+    assert meta.is_live is True
+    assert meta.title == "Exciting Live Stream"
+    assert meta.uploader == "StreamerOne"
+    assert meta.duration == 0.0
+
+
+def test_upcoming_live_stream_raises_helpful_error(tmp_path: Path) -> None:
+    from app.core.errors import MediaFetchError
+    from app.services.downloader import _metadata_from_info
+
+    settings = _settings(tmp_path)
+    info = {
+        "id": "upcoming123",
+        "title": "Scheduled Premier",
+        "live_status": "is_upcoming",
+    }
+    with pytest.raises(MediaFetchError) as exc_info:
+        _metadata_from_info(
+            info, normalized_url="https://youtube.com/watch?v=upcoming123", settings=settings
+        )
+    assert exc_info.value.code == "stream_upcoming"
+    assert "scheduled for the future" in exc_info.value.message

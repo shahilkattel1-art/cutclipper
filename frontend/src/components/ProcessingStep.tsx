@@ -7,6 +7,7 @@ import {
   Check,
   Download,
   Film,
+  Flame,
   PackageCheck,
   RefreshCw,
   ScanFace,
@@ -674,6 +675,11 @@ function FailureState({
           </p>
         ) : null}
         <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+          {job.error_code === 'live_stream' || job.error_message?.toLowerCase().includes('live stream') ? (
+            <Button onClick={onStartOver} icon={Flame} disabled={generating}>
+              Switch to Auto Hype Clip
+            </Button>
+          ) : null}
           {canRetry ? (
             <Button onClick={onRetry} loading={generating} icon={RefreshCw} disabled={generating}>
               {cancelled ? 'Resume with same settings' : 'Try again'}

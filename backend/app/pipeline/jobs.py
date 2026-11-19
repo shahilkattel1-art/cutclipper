@@ -1422,7 +1422,7 @@ class JobManager:
         if not record.upload_id:
             # Re-resolve immediately before any network fetch. This catches a
             # DNS answer that changed while the job was queued.
-            await validate_remote_url(record.url)
+            await validate_remote_url(record.url, allow_local=self.settings.allow_local_urls)
 
         metadata = record.video
         if metadata is None:
@@ -1481,6 +1481,27 @@ class JobManager:
             )
             source_path = await asyncio.to_thread(self._prepare_upload, record, downloads)
             self._update(record, progress=22, message="Upload ready to process")
+        elif metadata.is_live:
+            from app.services.ingest_live import RollingBufferRecorder
+
+            self._update(
+                record,
+                stage=JobStage.RECORDING,
+                progress=5,
+                message="Capturing live feed buffer",
+            )
+            recorder = RollingBufferRecorder(
+                record.url,
+                downloads,
+                self.settings,
+                buffer_minutes=5,
+                cancel_event=cancel,
+            )
+            target_secs = max(
+                90.0,
+                float(record.settings.clip_count * record.settings.max_clip_seconds),
+            )
+            source_path = await recorder.record_for_duration(min(300.0, target_secs))
         else:
             self._update(
                 record,

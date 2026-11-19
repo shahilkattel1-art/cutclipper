@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     app_name: str = "CutClipper"
     environment: str = "development"
+    allow_local_urls: bool = True
     log_level: str = "INFO"
     log_json: bool = True
 

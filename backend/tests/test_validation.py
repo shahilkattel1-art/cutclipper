@@ -56,3 +56,41 @@ def test_public_ipv4_literal_is_allowed() -> None:
 def test_empty_url_is_rejected() -> None:
     with pytest.raises(URLValidationError, match="Paste a video link"):
         normalize_url("   ")
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("http://localhost:8000/video.mp4", "http://localhost:8000/video.mp4"),
+        ("localhost:8000/video.mp4", "http://localhost:8000/video.mp4"),
+        ("http://127.0.0.1:8000/video.mp4", "http://127.0.0.1:8000/video.mp4"),
+        ("127.0.0.1:5173/sample.mp4", "http://127.0.0.1:5173/sample.mp4"),
+        ("http://localhost", "http://localhost/"),
+        ("localhost", "http://localhost/"),
+        ("http://localhost:3000", "http://localhost:3000/"),
+    ],
+)
+def test_allows_local_urls_when_enabled(raw: str, expected: str) -> None:
+    assert validate_public_url_shape(raw, allow_local=True) == expected
+
+
+@pytest.mark.asyncio
+async def test_validate_remote_url_allows_localhost_without_dns() -> None:
+    from app.core.validation import validate_remote_url
+
+    result = await validate_remote_url("http://localhost:8000/stream.mp4", allow_local=True)
+    assert result == "http://localhost:8000/stream.mp4"
+
+    # Also works without explicit allow_local when environment is development
+    result_default = await validate_remote_url("http://127.0.0.1:8000/stream.mp4")
+    assert result_default == "http://127.0.0.1:8000/stream.mp4"
+
+
+@pytest.mark.asyncio
+async def test_validate_remote_url_falls_back_on_dns_failure_when_local_allowed() -> None:
+    from app.core.validation import validate_remote_url
+
+    # In sandbox or offline dev where youtube.com DNS lookup fails with gaierror,
+    # validate_remote_url should not fail when allow_local is True
+    result = await validate_remote_url("https://www.youtube.com/watch?v=mock123", allow_local=True)
+    assert result == "https://www.youtube.com/watch?v=mock123"
