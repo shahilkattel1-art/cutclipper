@@ -118,6 +118,7 @@ class JobRecord:
     cancel_requested: bool = False
     zip_path: Path | None = None
     source_path: Path | None = None
+    transcript: Transcript | None = None
     caption_words: list[Word] = field(default_factory=list)
     clip_plans: list[ClipPlan] = field(default_factory=list)
     restyle_of: str | None = None
@@ -376,6 +377,7 @@ class JobManager:
             mode=JobMode.HYPE,
             video=source.video,
             source_path=source.source_path,
+            transcript=source.transcript,
             hype_mode=source.hype_mode,
             hype_record_minutes=source.hype_record_minutes,
             hype_top_n=source.hype_top_n,
@@ -1288,27 +1290,33 @@ class JobManager:
             else float(self.settings.hype_max_clip_seconds)
         )
 
-        moments, transcript, _energy, warnings = await analyze_hype_moments(
-            source_path=source_path,
-            url=record.url,
-            duration=media.duration,
-            settings=self.settings,
-            top_n=max(record.hype_top_n, record.hype_selected_rank),
-            min_clip_seconds=min_clip,
-            max_clip_seconds=max_clip,
-            cancel_event=cancel,
-            on_stage=on_hype_stage,
-        )
-        if warnings:
-            self._update(record, warnings=warnings)
-
-        if not moments:
-            raise ProcessingError(
-                "No hype moments could be detected in this feed.",
-                code="no_hype_moments",
+        if record.hype_moments and record.transcript is not None:
+            moments = record.hype_moments
+            transcript = record.transcript
+        else:
+            moments, transcript, _energy, warnings = await analyze_hype_moments(
+                source_path=source_path,
+                url=record.url,
+                duration=media.duration,
+                settings=self.settings,
+                top_n=max(record.hype_top_n, record.hype_selected_rank),
+                min_clip_seconds=min_clip,
+                max_clip_seconds=max_clip,
+                cancel_event=cancel,
+                on_stage=on_hype_stage,
             )
+            if warnings:
+                self._update(record, warnings=warnings)
 
-        record.hype_moments = moments
+            if not moments:
+                raise ProcessingError(
+                    "No hype moments could be detected in this feed.",
+                    code="no_hype_moments",
+                )
+
+            record.hype_moments = moments
+            record.transcript = transcript
+            record.caption_words = list(transcript.words)
         selected_idx = min(len(moments) - 1, max(0, record.hype_selected_rank - 1))
         moment = moments[selected_idx]
         record.hype_selected_moment = moment
@@ -1324,7 +1332,9 @@ class JobManager:
             start=moment.start,
             end=moment.end,
             score=moment.score,
-            origin="hype",
+            selection_mode="hype",
+            boundary_start="sentence",
+            boundary_end="sentence",
         )
         record.clip_plans = [plan]
 
@@ -1420,6 +1430,10 @@ class JobManager:
                 file_size=rendered.video_path.stat().st_size,
             )
         ]
+        if record.clips:
+            zip_path = outputs / f"{title_slug}_hype_{moment.rank}.zip"
+            await asyncio.to_thread(self._build_zip, record.clips, zip_path)
+            record.zip_path = zip_path
         self._finish(record, message=f"Hype clip ready (Score: {moment.score:.0f}/100)")
         logger.info(
             "hype job complete",

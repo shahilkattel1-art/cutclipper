@@ -277,14 +277,32 @@ def probe_media_sync(
     if width <= 0 or height <= 0:
         raise ProcessingError("The video dimensions are invalid.", code="invalid_dimensions")
 
-    duration_raw = payload.get("format", {}).get("duration") or video_stream.get("duration")
+    duration_raw = (
+        payload.get("format", {}).get("duration")
+        or video_stream.get("duration")
+        or (audio_stream.get("duration") if audio_stream else None)
+    )
     try:
         duration = float(duration_raw or 0)
     except (TypeError, ValueError):
         duration = 0.0
     if duration <= 0:
+        for tag_source in (payload.get("format", {}), video_stream, audio_stream or {}):
+            tag_dur = tag_source.get("tags", {}).get("DURATION")
+            if tag_dur:
+                parts = str(tag_dur).strip().split(":")
+                try:
+                    if len(parts) == 3:
+                        duration = float(parts[0]) * 3600 + float(parts[1]) * 60 + float(parts[2])
+                    elif len(parts) == 2:
+                        duration = float(parts[0]) * 60 + float(parts[1])
+                    if duration > 0:
+                        break
+                except (ValueError, TypeError):
+                    pass
+    if duration <= 0:
         raise ProcessingError(
-            "The video duration could not be determined. Live streams are not supported.",
+            "The video duration could not be determined. The stream or video file may be empty or unreadable.",
             code="unknown_duration",
         )
 
