@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -210,21 +211,29 @@ class RollingBufferRecorder:
         if not stream_meta.is_live:
             return await self._download_vod(on_progress=on_progress)
 
-        target_url = stream_meta.direct_stream_url or self.url
         segment_pattern = str(self.segments_dir / "seg_%05d.mp4")
 
-        # FFmpeg live recording with 10s segmentation
-        cmd = [
+        format_selector = (
+            "bv*[height<=1080][vcodec^=avc1]+ba[ext=m4a]/"
+            "bv*[height<=1080][vcodec^=avc1]+ba/"
+            "bv*[height<=1080]+ba/"
+            "b[height<=1080]/b"
+        )
+        yt_cmd = [
+            *_base_command(self.settings),
+            "-f",
+            format_selector,
+            "--no-warnings",
+            "--quiet",
+            "-o",
+            "-",
+            self.url,
+        ]
+        ffmpeg_cmd = [
             tools.ffmpeg,
             "-y",
-            "-reconnect",
-            "1",
-            "-reconnect_streamed",
-            "1",
-            "-reconnect_delay_max",
-            "5",
             "-i",
-            target_url,
+            "pipe:0",
             "-c:v",
             "copy",
             "-c:a",
@@ -244,18 +253,35 @@ class RollingBufferRecorder:
             "starting live stream recording",
             extra={"url": self.url, "target_seconds": duration_seconds},
         )
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        self._process = proc
+
+        r, w = os.pipe()
+        try:
+            proc_ytdlp = await asyncio.create_subprocess_exec(
+                *yt_cmd,
+                stdout=w,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        finally:
+            os.close(w)
+
+        try:
+            proc_ffmpeg = await asyncio.create_subprocess_exec(
+                *ffmpeg_cmd,
+                stdin=r,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        finally:
+            os.close(r)
+
+        self._process = proc_ffmpeg
 
         start_time = time.monotonic()
         try:
             while time.monotonic() - start_time < duration_seconds:
                 if self.cancel_event.is_set():
-                    proc.terminate()
+                    proc_ytdlp.terminate()
+                    proc_ffmpeg.terminate()
                     raise JobCancelledError()
 
                 elapsed = time.monotonic() - start_time
@@ -269,14 +295,30 @@ class RollingBufferRecorder:
                 self.cleanup_old_segments()
                 await asyncio.sleep(2.0)
 
-                # Check if process exited early (stream finished)
-                if proc.returncode is not None:
+                # Check if yt-dlp exited early
+                if proc_ytdlp.returncode is not None:
                     break
         finally:
-            if proc.returncode is None:
-                proc.terminate()
+            if proc_ytdlp.returncode is None:
+                proc_ytdlp.terminate()
                 with contextlib.suppress(Exception):
-                    await asyncio.wait_for(proc.wait(), timeout=5.0)
+                    await asyncio.wait_for(proc_ytdlp.wait(), timeout=3.0)
+            if proc_ffmpeg.returncode is None:
+                proc_ffmpeg.terminate()
+                with contextlib.suppress(Exception):
+                    await asyncio.wait_for(proc_ffmpeg.wait(), timeout=3.0)
+
+        segments = self.get_existing_segments()
+        if not segments:
+            stderr_bytes = await proc_ytdlp.stderr.read() if proc_ytdlp.stderr else b""
+            stderr_str = stderr_bytes.decode(errors="replace")
+            if stderr_str:
+                logger.warning("yt-dlp live recording failed", extra={"stderr": stderr_str})
+                raise _classify_error(stderr_str, action="record live stream")
+            raise ProcessingError(
+                "No live stream segments were recorded. The stream may be offline or unreachable.",
+                code="no_segments_recorded",
+            )
 
         return await self.merge_rolling_buffer()
 
@@ -292,8 +334,8 @@ class RollingBufferRecorder:
         concat_list = self.buffer_dir / "concat_list.txt"
         with open(concat_list, "w", encoding="utf-8") as f:
             for seg in segments:
-                # Use relative path or safe escaping
-                f.write(f"file '{seg.resolve()}'\n")
+                safe_path = str(seg.resolve()).replace("'", "'\\''")
+                f.write(f"file '{safe_path}'\n")
 
         merged_path = self.buffer_dir / "buffer_merged.mp4"
         tools = get_media_tools(self.settings)
@@ -329,10 +371,18 @@ class RollingBufferRecorder:
         if vod_path.exists() and vod_path.stat().st_size > 1_000_000:
             return vod_path
 
+        format_selector = (
+            "bv*[height<=1080][vcodec^=avc1]+ba[ext=m4a]/"
+            "bv*[height<=1080][vcodec^=avc1]+ba/"
+            "bv*[height<=1080]+ba/"
+            "b[height<=1080]/b"
+        )
         cmd = [
             *_base_command(self.settings),
             "-f",
-            "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+            format_selector,
+            "--merge-output-format",
+            "mp4",
             "-o",
             str(vod_path),
             self.url,

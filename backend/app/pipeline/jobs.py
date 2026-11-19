@@ -1175,7 +1175,18 @@ class JobManager:
                         progress=8,
                         message="Capturing live feed buffer",
                     )
-                    source_path = await recorder.record_for_duration(45.0)
+
+                    def on_clip_progress(fraction: float, msg: str) -> None:
+                        self._update(
+                            record,
+                            stage=JobStage.RECORDING,
+                            progress=8 + fraction * 19,
+                            message=msg,
+                        )
+
+                    source_path = await recorder.record_for_duration(
+                        45.0, on_progress=on_clip_progress
+                    )
                 else:
                     self._update(
                         record,
@@ -1196,8 +1207,18 @@ class JobManager:
                 record.url, downloads, self.settings, cancel_event=cancel
             )
             if stream_info.is_live:
+
+                def on_stream_rec_progress(frac: float, msg: str) -> None:
+                    self._update(
+                        record,
+                        stage=JobStage.RECORDING,
+                        progress=5 + frac * 22,
+                        message=msg,
+                    )
+
                 source_path = await recorder.record_for_duration(
-                    min(120.0, float(record.hype_record_minutes) * 60.0)
+                    min(120.0, float(record.hype_record_minutes) * 60.0),
+                    on_progress=on_stream_rec_progress,
                 )
             else:
 
@@ -1498,10 +1519,21 @@ class JobManager:
                 cancel_event=cancel,
             )
             target_secs = max(
-                90.0,
+                60.0,
                 float(record.settings.clip_count * record.settings.max_clip_seconds),
             )
-            source_path = await recorder.record_for_duration(min(300.0, target_secs))
+
+            def on_live_rec_progress(frac: float, msg: str) -> None:
+                self._update(
+                    record,
+                    stage=JobStage.RECORDING,
+                    progress=5 + frac * 17,
+                    message=msg,
+                )
+
+            source_path = await recorder.record_for_duration(
+                min(180.0, target_secs), on_progress=on_live_rec_progress
+            )
         else:
             self._update(
                 record,

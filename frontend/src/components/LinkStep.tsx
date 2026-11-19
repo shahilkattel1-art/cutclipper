@@ -4,21 +4,24 @@ import type { LucideIcon } from 'lucide-react'
 import {
   ArrowRight,
   BadgeCheck,
+  Camera,
   Captions,
   ClipboardPaste,
   Clock3,
   CloudUpload,
   Film,
   Flame,
+  Layers,
   Link2,
   LoaderCircle,
   ScanFace,
   ShieldCheck,
+  Sliders,
   Sparkles,
   TriangleAlert,
   WandSparkles,
 } from 'lucide-react'
-import type { HypeMode, PreviewResponse } from '../types/api'
+import type { HypeMode, LayoutMode, PreviewResponse } from '../types/api'
 import { assetUrl } from '../lib/api'
 import { cn, formatDuration, sourceName } from '../lib/utils'
 import { Button, Skeleton } from './ui'
@@ -51,6 +54,20 @@ interface LinkStepProps {
   onHypeMaxClipChange?: (sec: number) => void
   hypeTopN?: number
   onHypeTopNChange?: (n: number) => void
+  hypeLayoutMode?: LayoutMode
+  onHypeLayoutModeChange?: (mode: LayoutMode) => void
+  hypeWebcamHeight?: number
+  onHypeWebcamHeightChange?: (h: number) => void
+  hypeWebcamRegion?: [number, number, number, number] | null
+  onHypeWebcamRegionChange?: (region: [number, number, number, number] | null) => void
+  hypeAutoDetect?: boolean
+  onHypeAutoDetectChange?: (auto: boolean) => void
+  hypeDivider?: boolean
+  onHypeDividerChange?: (divider: boolean) => void
+  hypeRemoveWebcam?: boolean
+  onHypeRemoveWebcamChange?: (remove: boolean) => void
+  hypeSmartCenter?: boolean
+  onHypeSmartCenterChange?: (smart: boolean) => void
   onStartHype?: () => void
 }
 
@@ -120,11 +137,29 @@ export function LinkStep({
   onHypeMaxClipChange,
   hypeTopN = 3,
   onHypeTopNChange,
+  hypeLayoutMode = 'default',
+  onHypeLayoutModeChange,
+  hypeWebcamHeight = 600,
+  onHypeWebcamHeightChange,
+  hypeWebcamRegion = null,
+  onHypeWebcamRegionChange,
+  hypeAutoDetect = true,
+  onHypeAutoDetectChange,
+  hypeDivider = false,
+  onHypeDividerChange,
+  hypeRemoveWebcam = false,
+  onHypeRemoveWebcamChange,
+  hypeSmartCenter = false,
+  onHypeSmartCenterChange,
   onStartHype,
 }: LinkStepProps) {
   const [touched, setTouched] = useState(false)
   const [pasting, setPasting] = useState(false)
   const [dragging, setDragging] = useState(false)
+  const [showManualArea, setShowManualArea] = useState(false)
+  const [manualBox, setManualBox] = useState<[number, number, number, number]>(
+    hypeWebcamRegion || [1500, 50, 400, 300],
+  )
   const toast = useToast()
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -601,6 +636,188 @@ export function LinkStep({
                           Audio loudness + live chat velocity + speech excitement
                         </p>
                       </div>
+                    </div>
+
+                    {/* Layout mode: Default vs Facecam Top + Gameplay Fill */}
+                    <div className="rounded-xl border-[1.5px] border-ink/30 bg-paper/60 p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-ink">
+                          <Layers className="h-3.5 w-3.5 text-tomato" aria-hidden="true" />
+                          9:16 Layout Mode
+                        </span>
+                        <span className="text-[9.5px] text-ink-soft">
+                          Standard vertical or split facecam
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={() => onHypeLayoutModeChange?.('default')}
+                          className={cn(
+                            'flex items-center gap-2 rounded-lg border-[1.5px] p-2.5 text-left transition',
+                            hypeLayoutMode === 'default'
+                              ? 'border-ink bg-mustard-soft shadow-[1px_2px_0_#211d19]'
+                              : 'border-ink/20 bg-paper-soft hover:border-ink/50',
+                          )}
+                        >
+                          <ScanFace className="h-4 w-4 shrink-0 text-ink" aria-hidden="true" />
+                          <div>
+                            <span className="block text-[11.5px] font-bold text-ink">Default (Full Bleed)</span>
+                            <span className="block text-[9.5px] text-ink-soft">Smart speaker-tracking crop</span>
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => onHypeLayoutModeChange?.('facecam_top')}
+                          className={cn(
+                            'flex items-center gap-2 rounded-lg border-[1.5px] p-2.5 text-left transition',
+                            hypeLayoutMode === 'facecam_top'
+                              ? 'border-ink bg-tomato-soft shadow-[1px_2px_0_#211d19]'
+                              : 'border-ink/20 bg-paper-soft hover:border-ink/50',
+                          )}
+                        >
+                          <Camera className="h-4 w-4 shrink-0 text-tomato" aria-hidden="true" />
+                          <div>
+                            <span className="block text-[11.5px] font-bold text-ink">Webcam Top + Gameplay</span>
+                            <span className="block text-[9.5px] text-ink-soft">1080x1920 stacked split</span>
+                          </div>
+                        </button>
+                      </div>
+
+                      {hypeLayoutMode === 'facecam_top' ? (
+                        <div className="mt-3 flex flex-col gap-3 border-t border-dashed border-ink/20 pt-3">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                            {/* Visual Preview Box */}
+                            <div className="relative mx-auto flex h-36 w-20 shrink-0 flex-col overflow-hidden rounded-lg border-2 border-ink bg-black/90 shadow-[2px_2px_0_#211d19]">
+                              <div
+                                style={{ height: `${(hypeWebcamHeight / 1920) * 100}%` }}
+                                className="relative flex w-full items-center justify-center bg-teal/40 border-b border-white/40"
+                              >
+                                <span className="text-[7.5px] font-bold text-white uppercase tracking-wider">Webcam</span>
+                              </div>
+                              <div className="relative flex flex-1 w-full flex-col items-center justify-between p-1 bg-periwinkle/30">
+                                <span className="text-[7.5px] font-semibold text-white/90">Gameplay</span>
+                                <div className="rounded bg-yellow-400/90 px-1 py-0.5 text-[6px] font-bold text-black shadow-sm">
+                                  Subtitles
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Sliders and settings */}
+                            <div className="flex-1 space-y-2.5">
+                              <div>
+                                <div className="flex justify-between text-[10.5px]">
+                                  <span className="font-semibold text-ink">Webcam Height:</span>
+                                  <span className="font-bold text-tomato">
+                                    {hypeWebcamHeight}px ({Math.round((hypeWebcamHeight / 1920) * 100)}%)
+                                  </span>
+                                </div>
+                                <input
+                                  type="range"
+                                  min={300}
+                                  max={900}
+                                  step={20}
+                                  value={hypeWebcamHeight}
+                                  onChange={(e) =>
+                                    onHypeWebcamHeightChange?.(parseInt(e.target.value) || 600)
+                                  }
+                                  className="mt-1 h-1.5 w-full cursor-pointer accent-tomato"
+                                />
+                              </div>
+
+                              <div className="flex flex-wrap gap-2 pt-1">
+                                <label className="inline-flex cursor-pointer items-center gap-1.5 text-[10.5px] font-medium text-ink">
+                                  <input
+                                    type="checkbox"
+                                    checked={hypeAutoDetect}
+                                    onChange={(e) => onHypeAutoDetectChange?.(e.target.checked)}
+                                    className="rounded accent-tomato"
+                                  />
+                                  Auto-detect
+                                </label>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setShowManualArea(!showManualArea)}
+                                  className="inline-flex items-center gap-1 rounded-md border border-ink/30 bg-paper px-2 py-1 text-[10px] font-bold text-ink shadow-[1px_1px_0_#211d19] transition hover:bg-mustard-soft"
+                                >
+                                  <Sliders className="h-3 w-3" />
+                                  {showManualArea ? 'Hide Area Box' : 'Set Webcam Area (x,y,w,h)'}
+                                </button>
+
+                                <label className="inline-flex cursor-pointer items-center gap-1.5 text-[10.5px] font-medium text-ink">
+                                  <input
+                                    type="checkbox"
+                                    checked={hypeDivider}
+                                    onChange={(e) => onHypeDividerChange?.(e.target.checked)}
+                                    className="rounded accent-tomato"
+                                  />
+                                  Divider line
+                                </label>
+
+                                <label className="inline-flex cursor-pointer items-center gap-1.5 text-[10.5px] font-medium text-ink">
+                                  <input
+                                    type="checkbox"
+                                    checked={hypeSmartCenter}
+                                    onChange={(e) => onHypeSmartCenterChange?.(e.target.checked)}
+                                    className="rounded accent-tomato"
+                                  />
+                                  Smart center
+                                </label>
+
+                                <label className="inline-flex cursor-pointer items-center gap-1.5 text-[10.5px] font-medium text-ink">
+                                  <input
+                                    type="checkbox"
+                                    checked={hypeRemoveWebcam}
+                                    onChange={(e) => onHypeRemoveWebcamChange?.(e.target.checked)}
+                                    className="rounded accent-tomato"
+                                  />
+                                  Remove webcam from gameplay
+                                </label>
+                              </div>
+                            </div>
+                          </div>
+
+                          {showManualArea && (
+                            <div className="rounded-lg border border-ink/20 bg-paper-soft p-2.5">
+                              <div className="mb-1.5 flex items-center justify-between">
+                                <span className="text-[10px] font-bold uppercase text-ink">
+                                  Custom Webcam Area (source pixels)
+                                </span>
+                                <span className="text-[9px] text-ink-soft">
+                                  Leave blank for auto-detect
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-4 gap-1.5">
+                                {(['x', 'y', 'w', 'h'] as const).map((key, i) => (
+                                  <div key={key}>
+                                    <span className="text-[9px] font-bold uppercase text-ink-soft">
+                                      {key}
+                                    </span>
+                                    <input
+                                      type="number"
+                                      value={manualBox[i]}
+                                      onChange={(e) => {
+                                        const next = [...manualBox] as [
+                                          number,
+                                          number,
+                                          number,
+                                          number,
+                                        ]
+                                        next[i] = parseInt(e.target.value) || 0
+                                        setManualBox(next)
+                                        onHypeWebcamRegionChange?.(next)
+                                      }}
+                                      className="paper-input h-7 w-full rounded text-center text-[11px] font-medium"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 rounded-lg bg-mustard-soft/70 px-3 py-2 text-[11px] font-medium text-ink">

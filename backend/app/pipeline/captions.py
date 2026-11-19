@@ -18,6 +18,7 @@ from app.schemas import (
     CaptionStyle,
     CaptionTextCase,
     CaptionWord,
+    LayoutMode,
     NepaliScript,
 )
 from app.services.nepali_terms import correct_nepali_phrases
@@ -282,7 +283,18 @@ def _position(
     position: CaptionPosition,
     width: int,
     height: int,
+    *,
+    layout_mode: LayoutMode = LayoutMode.DEFAULT,
+    webcam_height: int = 600,
 ) -> tuple[int, int, int]:
+    if layout_mode == LayoutMode.FACECAM_TOP:
+        gameplay_h = max(200, height - webcam_height)
+        if position == CaptionPosition.TOP:
+            return width // 2, round(webcam_height + gameplay_h * 0.12), 8
+        if position == CaptionPosition.MIDDLE:
+            return width // 2, round(webcam_height + gameplay_h * 0.45), 5
+        return width // 2, round(webcam_height + gameplay_h * 0.78), 2
+
     if position == CaptionPosition.TOP:
         return width // 2, round(height * 0.165), 8
     if position == CaptionPosition.MIDDLE:
@@ -819,6 +831,8 @@ def build_ass(
     output_size: tuple[int, int],
     output_path: Path,
     secondary_words: list[Word] | None = None,
+    layout_mode: LayoutMode = LayoutMode.DEFAULT,
+    webcam_height: int = 600,
 ) -> CaptionRenderResult:
     """Render a subtitle file for a clip. Returns zero events when there is no speech."""
 
@@ -880,7 +894,13 @@ def build_ass(
         max_words=settings.max_words,
         max_lines=settings.max_lines,
     )
-    x, y, alignment = _position(settings.position, width, height)
+    x, y, alignment = _position(
+        settings.position,
+        width,
+        height,
+        layout_mode=layout_mode,
+        webcam_height=webcam_height,
+    )
     word_style = settings.word_style
     line_style = settings.line_style
     separator = _separator(word_spacing, letter_spacing)

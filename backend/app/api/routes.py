@@ -418,6 +418,14 @@ async def create_hype_job(payload: HypeRequest, request: Request) -> JobOut:
     clip_settings = ClipSettings()
     clip_settings.min_clip_seconds = int(payload.min_clip_seconds)
     clip_settings.max_clip_seconds = int(payload.max_clip_seconds)
+    clip_settings.layout_mode = payload.layout_mode
+    clip_settings.webcam_height = payload.webcam_height
+    clip_settings.webcam_region = payload.webcam_region
+    clip_settings.auto_detect = payload.auto_detect
+    clip_settings.gap = payload.gap
+    clip_settings.divider = payload.divider
+    clip_settings.remove_webcam_from_gameplay = payload.remove_webcam_from_gameplay
+    clip_settings.smart_center = payload.smart_center
 
     record = await manager.create_job(
         normalized,

@@ -48,6 +48,7 @@ import type {
   ExportResolution,
   HypeMode,
   Job,
+  LayoutMode,
   PreviewResponse,
   TranscriptResponse,
   TranscriptionQuality,
@@ -107,6 +108,13 @@ function AppContent() {
   const [hypeMinClip, setHypeMinClip] = useState(30)
   const [hypeMaxClip, setHypeMaxClip] = useState(60)
   const [hypeTopN, setHypeTopN] = useState(3)
+  const [hypeLayoutMode, setHypeLayoutMode] = useState<LayoutMode>('default')
+  const [hypeWebcamHeight, setHypeWebcamHeight] = useState(600)
+  const [hypeWebcamRegion, setHypeWebcamRegion] = useState<[number, number, number, number] | null>(null)
+  const [hypeAutoDetect, setHypeAutoDetect] = useState(true)
+  const [hypeDivider, setHypeDivider] = useState(false)
+  const [hypeRemoveWebcam, setHypeRemoveWebcam] = useState(false)
+  const [hypeSmartCenter, setHypeSmartCenter] = useState(false)
   const [restyleParent, setRestyleParent] = useState<Job | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [cancelRequested, setCancelRequested] = useState(false)
@@ -829,6 +837,14 @@ function AppContent() {
         selected_rank: 1,
         subtitles: true,
         reframe: true,
+        layout_mode: hypeLayoutMode,
+        webcam_height: hypeWebcamHeight,
+        webcam_region: hypeWebcamRegion,
+        auto_detect: hypeAutoDetect,
+        gap: 0,
+        divider: hypeDivider,
+        remove_webcam_from_gameplay: hypeRemoveWebcam,
+        smart_center: hypeSmartCenter,
       })
       if (generationToken.current !== token) {
         void cancelJob(newJob.id).catch(() => undefined)
@@ -849,7 +865,22 @@ function AppContent() {
       generationRef.current = false
       setGenerating(false)
     }
-  }, [url, hypeMode, hypeRecordMinutes, hypeMinClip, hypeMaxClip, hypeTopN, toast])
+  }, [
+    url,
+    hypeMode,
+    hypeRecordMinutes,
+    hypeMinClip,
+    hypeMaxClip,
+    hypeTopN,
+    hypeLayoutMode,
+    hypeWebcamHeight,
+    hypeWebcamRegion,
+    hypeAutoDetect,
+    hypeDivider,
+    hypeRemoveWebcam,
+    hypeSmartCenter,
+    toast,
+  ])
 
   const regenerateHype = useCallback(
     async (rank: number) => {
@@ -1346,6 +1377,20 @@ function AppContent() {
                   onHypeMaxClipChange={setHypeMaxClip}
                   hypeTopN={hypeTopN}
                   onHypeTopNChange={setHypeTopN}
+                  hypeLayoutMode={hypeLayoutMode}
+                  onHypeLayoutModeChange={setHypeLayoutMode}
+                  hypeWebcamHeight={hypeWebcamHeight}
+                  onHypeWebcamHeightChange={setHypeWebcamHeight}
+                  hypeWebcamRegion={hypeWebcamRegion}
+                  onHypeWebcamRegionChange={setHypeWebcamRegion}
+                  hypeAutoDetect={hypeAutoDetect}
+                  onHypeAutoDetectChange={setHypeAutoDetect}
+                  hypeDivider={hypeDivider}
+                  onHypeDividerChange={setHypeDivider}
+                  hypeRemoveWebcam={hypeRemoveWebcam}
+                  onHypeRemoveWebcamChange={setHypeRemoveWebcam}
+                  hypeSmartCenter={hypeSmartCenter}
+                  onHypeSmartCenterChange={setHypeSmartCenter}
                   onStartHype={startHypeJob}
                 />
               ) : null}

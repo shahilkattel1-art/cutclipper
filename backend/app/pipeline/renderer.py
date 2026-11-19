@@ -19,6 +19,7 @@ from app.schemas import (
     ClipSettings,
     ExportResolution,
     JobStage,
+    LayoutMode,
     ReframeMode,
     TransitionSettings,
     TransitionStyle,
@@ -186,7 +187,34 @@ def _video_filters(
     fonts_dir: Path,
     work_dir: Path,
     reframe_mode: ReframeMode,
+    webcam_region: tuple[int, int, int, int] | None = None,
+    webcam_height: int = 600,
+    gap: int = 0,
+    divider: bool = False,
+    remove_webcam_from_gameplay: bool = False,
+    smart_center_x: int | None = None,
 ) -> tuple[str, str]:
+    if webcam_region is not None:
+        from app.services.layout_facecam import build_facecam_filter_graph
+
+        return build_facecam_filter_graph(
+            media=media,
+            output_size=output_size,
+            webcam_region=webcam_region,
+            webcam_height=webcam_height,
+            gap=gap,
+            divider=divider,
+            remove_webcam_from_gameplay=remove_webcam_from_gameplay,
+            smart_center_x=smart_center_x,
+            caption_path=caption_path,
+            transitions=transitions,
+            settings=settings,
+            fonts_dir=fonts_dir,
+            work_dir=work_dir,
+            duration=plan.duration,
+            index=index,
+        )
+
     width, height = output_size
     fps = settings.output_fps
     duration = plan.duration
@@ -369,6 +397,9 @@ class ClipRenderer:
         self.cancel_event = cancel_event
         self.tools = get_media_tools(settings)
         self._faces_present: bool | None = None
+        self._webcam_region: tuple[int, int, int, int] | None = None
+        self._webcam_resolved: bool = False
+        self._smart_center_x: int | None = None
         self.output_dir.mkdir(parents=True, exist_ok=True)
         (work_dir / "captions").mkdir(parents=True, exist_ok=True)
         self.fonts_ref = filter_fonts_dir(work_dir, settings.fonts_dir)
@@ -405,47 +436,107 @@ class ClipRenderer:
 
         face_track: FaceTrack | None = None
         effective_reframe = reframe_mode
-        if reframe_mode == ReframeMode.SMART:
-            if self._faces_present is None:
-                on_stage(JobStage.REFRAMING, "Checking the video for faces", 0.01)
-                self._faces_present = await probe_faces_present(
-                    self.source,
-                    self.media.duration,
-                    self.work_dir,
-                    cancel_event=self.cancel_event,
-                    samples=min(24, max(8, int(self.media.duration / 30))),
+
+        if self.clip_settings.layout_mode == LayoutMode.FACECAM_TOP:
+            if not self._webcam_resolved:
+                from app.services.layout_facecam import (
+                    compute_smart_center_x,
+                    detect_webcam_region,
+                    get_presets_file_path,
+                    load_webcam_preset,
+                    parse_webcam_region,
+                    save_webcam_preset,
                 )
-                if not self._faces_present:
-                    warnings.append(
-                        "No faces were detected in this video, so clips use a full-bleed "
-                        "center crop instead of face tracking."
+
+                on_stage(JobStage.REFRAMING, "Locating webcam overlay", 0.01)
+                region = parse_webcam_region(self.clip_settings.webcam_region)
+                presets_path = get_presets_file_path(self.settings)
+                channel = getattr(self.media, "uploader", None) or getattr(
+                    self.media, "channel", None
+                )
+                if region is None and channel:
+                    region = load_webcam_preset(
+                        channel, (self.media.width, self.media.height), presets_path
                     )
-            if self._faces_present:
+                if region is None and self.clip_settings.auto_detect:
+                    region = detect_webcam_region(
+                        self.source,
+                        duration=self.media.duration,
+                        media_width=self.media.width,
+                        media_height=self.media.height,
+                    )
+                    if region and channel:
+                        save_webcam_preset(
+                            channel, region, (self.media.width, self.media.height), presets_path
+                        )
+                if region is not None:
+                    self._webcam_region = region
+                    if self.clip_settings.smart_center:
+                        crop_w = round(
+                            self.media.height
+                            * (width / max(1, height - self.clip_settings.webcam_height))
+                        )
+                        self._smart_center_x = compute_smart_center_x(
+                            self.source,
+                            duration=self.media.duration,
+                            media_width=self.media.width,
+                            media_height=self.media.height,
+                            crop_width=crop_w,
+                        )
+                else:
+                    self._webcam_region = None
+                    warnings.append(
+                        "No webcam overlay was detected; falling back to standard 9:16 vertical reframe."
+                    )
+                self._webcam_resolved = True
+
+            if self._webcam_region is not None:
                 on_stage(
                     JobStage.REFRAMING,
-                    f"Tracking the speaker for clip {index}",
-                    0.02,
+                    f"Composing Webcam + Gameplay layout for clip {index}",
+                    0.05,
                 )
-                face_track = await track_faces(
-                    self.source,
-                    self.work_dir,
-                    plan.start,
-                    duration,
-                    cancel_event=self.cancel_event,
-                )
-                if face_track.warning:
-                    warnings.append(face_track.warning)
-                if not face_track.has_face:
-                    # Faces exist somewhere, but not in this clip: fill the
-                    # frame with a centered crop instead of padding it.
-                    face_track = None
+
+        if self._webcam_region is None:
+            if reframe_mode == ReframeMode.SMART:
+                if self._faces_present is None:
+                    on_stage(JobStage.REFRAMING, "Checking the video for faces", 0.01)
+                    self._faces_present = await probe_faces_present(
+                        self.source,
+                        self.media.duration,
+                        self.work_dir,
+                        cancel_event=self.cancel_event,
+                        samples=min(24, max(8, int(self.media.duration / 30))),
+                    )
+                    if not self._faces_present:
+                        warnings.append(
+                            "No faces were detected in this video, so clips use a full-bleed "
+                            "center crop instead of face tracking."
+                        )
+                if self._faces_present:
+                    on_stage(
+                        JobStage.REFRAMING,
+                        f"Tracking the speaker for clip {index}",
+                        0.02,
+                    )
+                    face_track = await track_faces(
+                        self.source,
+                        self.work_dir,
+                        plan.start,
+                        duration,
+                        cancel_event=self.cancel_event,
+                    )
+                    if face_track.warning:
+                        warnings.append(face_track.warning)
+                    if not face_track.has_face:
+                        face_track = None
+                        effective_reframe = ReframeMode.CENTER
+                        on_stage(JobStage.REFRAMING, "No face in this clip · center crop", 0.05)
+                else:
                     effective_reframe = ReframeMode.CENTER
-                    on_stage(JobStage.REFRAMING, "No face in this clip · center crop", 0.05)
+                    on_stage(JobStage.REFRAMING, "Filling the frame · center crop", 0.05)
             else:
-                effective_reframe = ReframeMode.CENTER
-                on_stage(JobStage.REFRAMING, "Filling the frame · center crop", 0.05)
-        else:
-            on_stage(JobStage.REFRAMING, f"Reframing clip {index}", 0.05)
+                on_stage(JobStage.REFRAMING, f"Reframing clip {index}", 0.05)
 
         caption_path: Path | None = None
         if captions.enabled:
@@ -470,6 +561,12 @@ class ClipRenderer:
                     settings=captions,
                     output_size=(width, height),
                     output_path=caption_file,
+                    layout_mode=(
+                        self.clip_settings.layout_mode
+                        if self._webcam_region is not None
+                        else LayoutMode.DEFAULT
+                    ),
+                    webcam_height=self.clip_settings.webcam_height,
                 )
                 if result.event_count > 0:
                     caption_path = Path(result.path)
@@ -496,6 +593,12 @@ class ClipRenderer:
             fonts_dir=self.fonts_ref,
             work_dir=self.work_dir,
             reframe_mode=effective_reframe,
+            webcam_region=self._webcam_region,
+            webcam_height=self.clip_settings.webcam_height,
+            gap=self.clip_settings.gap,
+            divider=self.clip_settings.divider,
+            remove_webcam_from_gameplay=self.clip_settings.remove_webcam_from_gameplay,
+            smart_center_x=self._smart_center_x,
         )
         filter_complex = video_chain
         audio_map: str | None = None

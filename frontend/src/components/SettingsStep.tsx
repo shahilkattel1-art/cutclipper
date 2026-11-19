@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import {
   ArrowLeft,
   ArrowRight,
+  Camera,
   Captions,
   Check,
   Clock3,
@@ -11,6 +12,7 @@ import {
   Minus,
   Scissors,
   ScanFace,
+  Sliders,
   SlidersHorizontal,
   Sparkles,
   Type,
@@ -170,6 +172,7 @@ export function SettingsStep({
       transitions: { ...settings.transitions, ...patch },
     })
   }
+  const [showManualArea, setShowManualArea] = useState(false)
 
   const minLength = settings.min_clip_seconds
   const maxLength = settings.max_clip_seconds
@@ -601,6 +604,177 @@ export function SettingsStep({
                     )
                   })}
                 </div>
+              </div>
+
+              <div>
+                <p className="mb-3 text-[13px] font-medium text-ink-soft">Layout Mode</p>
+                <div role="group" aria-label="Layout mode" className="grid gap-2.5 md:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => update({ layout_mode: 'default' })}
+                    className={cn(
+                      'relative rounded-xl border p-3.5 text-left transition duration-200',
+                      settings.layout_mode !== 'facecam_top'
+                        ? 'border-[1.5px] border-ink bg-teal-soft shadow-[2px_3px_0_#211d19]'
+                        : 'border-[1.5px] border-ink/25 bg-paper-soft hover:-translate-y-0.5 hover:border-ink hover:bg-mustard-soft/40',
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <ScanFace
+                        className={cn(
+                          'h-4 w-4',
+                          settings.layout_mode !== 'facecam_top' ? 'text-teal' : 'text-ink-soft',
+                        )}
+                        aria-hidden="true"
+                      />
+                      {settings.layout_mode !== 'facecam_top' ? (
+                        <Check className="h-3.5 w-3.5 text-teal" aria-hidden="true" />
+                      ) : null}
+                    </div>
+                    <p
+                      className={cn(
+                        'mt-2.5 text-[12.5px] font-semibold',
+                        settings.layout_mode !== 'facecam_top' ? 'text-ink' : 'text-ink-soft',
+                      )}
+                    >
+                      Default (Full Bleed)
+                    </p>
+                    <p className="mt-1 text-[11px] leading-4 text-ink-soft">
+                      Single vertical frame with edge-to-edge crop
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => update({ layout_mode: 'facecam_top' })}
+                    className={cn(
+                      'relative rounded-xl border p-3.5 text-left transition duration-200',
+                      settings.layout_mode === 'facecam_top'
+                        ? 'border-[1.5px] border-ink bg-tomato-soft shadow-[2px_3px_0_#211d19]'
+                        : 'border-[1.5px] border-ink/25 bg-paper-soft hover:-translate-y-0.5 hover:border-ink hover:bg-mustard-soft/40',
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <Camera
+                        className={cn(
+                          'h-4 w-4',
+                          settings.layout_mode === 'facecam_top' ? 'text-tomato' : 'text-ink-soft',
+                        )}
+                        aria-hidden="true"
+                      />
+                      {settings.layout_mode === 'facecam_top' ? (
+                        <Check className="h-3.5 w-3.5 text-tomato" aria-hidden="true" />
+                      ) : null}
+                    </div>
+                    <p
+                      className={cn(
+                        'mt-2.5 text-[12.5px] font-semibold',
+                        settings.layout_mode === 'facecam_top' ? 'text-ink' : 'text-ink-soft',
+                      )}
+                    >
+                      Webcam Top + Gameplay Fill
+                    </p>
+                    <p className="mt-1 text-[11px] leading-4 text-ink-soft">
+                      Split vertical short with facecam top and full gameplay
+                    </p>
+                  </button>
+                </div>
+
+                {settings.layout_mode === 'facecam_top' ? (
+                  <div className="mt-3.5 rounded-xl border-[1.5px] border-ink/25 bg-paper-soft p-3.5 space-y-3">
+                    <div>
+                      <div className="flex justify-between text-[11px]">
+                        <span className="font-semibold text-ink">Webcam Panel Height:</span>
+                        <span className="font-bold text-tomato">
+                          {settings.webcam_height || 600}px ({Math.round(((settings.webcam_height || 600) / 1920) * 100)}%)
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={300}
+                        max={900}
+                        step={20}
+                        value={settings.webcam_height || 600}
+                        onChange={(e) => update({ webcam_height: parseInt(e.target.value) || 600 })}
+                        className="mt-1.5 h-1.5 w-full cursor-pointer accent-tomato"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap gap-2.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowManualArea(!showManualArea)}
+                        className="inline-flex items-center gap-1 rounded-md border border-ink/30 bg-paper px-2.5 py-1 text-[10.5px] font-bold text-ink shadow-[1px_1px_0_#211d19] hover:bg-mustard-soft transition"
+                      >
+                        <Sliders className="h-3 w-3" />
+                        {showManualArea ? 'Hide Area Box' : 'Set Webcam Area (x,y,w,h)'}
+                      </button>
+
+                      <label className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-ink">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(settings.divider)}
+                          onChange={(e) => update({ divider: e.target.checked })}
+                          className="rounded accent-tomato"
+                        />
+                        Divider line
+                      </label>
+
+                      <label className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-ink">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(settings.smart_center)}
+                          onChange={(e) => update({ smart_center: e.target.checked })}
+                          className="rounded accent-tomato"
+                        />
+                        Smart motion center
+                      </label>
+
+                      <label className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-ink">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(settings.remove_webcam_from_gameplay)}
+                          onChange={(e) => update({ remove_webcam_from_gameplay: e.target.checked })}
+                          className="rounded accent-tomato"
+                        />
+                        Remove webcam from gameplay
+                      </label>
+                    </div>
+
+                    {showManualArea && (
+                      <div className="rounded-lg border border-ink/20 bg-paper p-2.5">
+                        <div className="mb-1.5 flex items-center justify-between">
+                          <span className="text-[10px] font-bold uppercase text-ink">
+                            Webcam Region in Source (Pixels)
+                          </span>
+                          <span className="text-[9px] text-ink-soft">
+                            Leave 0s to auto-detect
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                          {(['x', 'y', 'w', 'h'] as const).map((key, i) => (
+                            <div key={key}>
+                              <span className="text-[9px] font-bold uppercase text-ink-soft">
+                                {key}
+                              </span>
+                              <input
+                                type="number"
+                                value={settings.webcam_region?.[i] || 0}
+                                onChange={(e) => {
+                                  const current = settings.webcam_region || [0, 0, 0, 0]
+                                  const next = [...current] as [number, number, number, number]
+                                  next[i] = parseInt(e.target.value) || 0
+                                  update({ webcam_region: next, auto_detect: false })
+                                }}
+                                className="paper-input h-7 w-full rounded text-center text-[11px] font-medium"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
               </div>
             </div>
           </SectionCard>
@@ -1112,6 +1286,20 @@ function PreviewPhone({
               />
             ))}
           </div>
+
+          {settings.layout_mode === 'facecam_top' && (
+            <div
+              style={{ height: `${((settings.webcam_height || 600) / 1920) * 100}%` }}
+              className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-end justify-between border-b-2 border-dashed border-terracotta bg-terracotta/20 px-3 py-1"
+            >
+              <span className="rounded bg-ink/80 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-white">
+                Webcam ({settings.webcam_height || 600}px)
+              </span>
+              <span className="text-[7px] font-mono text-white/90">
+                {settings.divider ? 'Divider On' : 'Seamless'}
+              </span>
+            </div>
+          )}
 
           {settings.captions.enabled ? (
             <CaptionPreview

@@ -107,6 +107,16 @@ class Settings(BaseSettings):
     hype_window_seconds: float = Field(default=5.0, ge=1.0, le=15.0)
     hype_step_seconds: float = Field(default=1.0, ge=0.5, le=5.0)
 
+    # Webcam + Gameplay layout options
+    layout_mode: str = "default"
+    webcam_height: int = 600
+    webcam_region: str | None = None
+    auto_detect: bool = True
+    gap: int = 0
+    divider: bool = False
+    remove_webcam_from_gameplay: bool = False
+    smart_center: bool = False
+
     @property
     def jobs_dir(self) -> Path:
         return self.data_dir / "jobs"

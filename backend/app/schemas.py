@@ -54,6 +54,11 @@ class ReframeMode(StrEnum):
     BLUR = "blur"
 
 
+class LayoutMode(StrEnum):
+    DEFAULT = "default"
+    FACECAM_TOP = "facecam_top"
+
+
 class ExportResolution(StrEnum):
     HD = "1080p"
     UHD_4K = "4k"
@@ -323,6 +328,14 @@ class ClipSettings(BaseModel):
     resolution: ExportResolution = ExportResolution.HD
     export_quality: ExportQuality = ExportQuality.HIGH
     reframe_mode: ReframeMode = ReframeMode.SMART
+    layout_mode: LayoutMode = LayoutMode.DEFAULT
+    webcam_height: int = Field(default=600, ge=240, le=1200)
+    webcam_region: list[int] | None = None
+    auto_detect: bool = True
+    gap: int = Field(default=0, ge=0, le=100)
+    divider: bool = False
+    remove_webcam_from_gameplay: bool = False
+    smart_center: bool = False
     captions: CaptionSettings = Field(default_factory=CaptionSettings)
     transitions: TransitionSettings = Field(default_factory=TransitionSettings)
 
@@ -661,6 +674,14 @@ class HypeRequest(BaseModel):
     subtitles: bool = True
     reframe: bool = True
     language: str | None = None
+    layout_mode: LayoutMode = LayoutMode.DEFAULT
+    webcam_height: int = Field(default=600, ge=240, le=1200)
+    webcam_region: list[int] | None = None
+    auto_detect: bool = True
+    gap: int = Field(default=0, ge=0, le=100)
+    divider: bool = False
+    remove_webcam_from_gameplay: bool = False
+    smart_center: bool = False
 
 
 class HypeJobMetadata(BaseModel):

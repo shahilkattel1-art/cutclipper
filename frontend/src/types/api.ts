@@ -28,6 +28,7 @@ export type CaptionFontStyle = 'regular' | 'bold' | 'italic' | 'bold_italic'
 export type CaptionTextCase = 'none' | 'uppercase' | 'lowercase'
 export type NepaliScript = 'devanagari' | 'roman'
 export type TransitionStyle = 'fade' | 'zoom' | 'slide' | 'whip_pan'
+export type LayoutMode = 'default' | 'facecam_top'
 export type CaptionFont = string
 export type JobMode = 'clips' | 'captions' | 'hype'
 export type HypeMode = 'record' | 'clip_now' | 'vod'
@@ -92,6 +93,14 @@ export interface ClipSettings {
   resolution: ExportResolution
   export_quality: ExportQuality
   reframe_mode: ReframeMode
+  layout_mode?: LayoutMode
+  webcam_height?: number
+  webcam_region?: [number, number, number, number] | null
+  auto_detect?: boolean
+  gap?: number
+  divider?: boolean
+  remove_webcam_from_gameplay?: boolean
+  smart_center?: boolean
   captions: CaptionSettings
   transitions: TransitionSettings
 }
@@ -246,6 +255,14 @@ export interface HypeRequest {
   subtitles?: boolean
   reframe?: boolean
   language?: string | null
+  layout_mode?: LayoutMode
+  webcam_height?: number
+  webcam_region?: [number, number, number, number] | null
+  auto_detect?: boolean
+  gap?: number
+  divider?: boolean
+  remove_webcam_from_gameplay?: boolean
+  smart_center?: boolean
 }
 
 export interface ApiErrorBody {
