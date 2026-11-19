@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from app.config import Settings
 from app.pipeline.types import CutBoundary, Transcript, Word
@@ -152,3 +153,51 @@ def test_rolling_buffer_cleanup(tmp_path) -> None:
     remaining = recorder.get_existing_segments()
     assert len(remaining) == 6
     assert remaining[0].name == "seg_00004.mp4"
+
+
+@pytest.mark.asyncio
+async def test_analyze_hype_moments_end_to_end(tmp_path, monkeypatch) -> None:
+    from app.services.hype import analyze_hype_moments
+
+    source = tmp_path / "dummy_source.mp4"
+    source.write_bytes(b"dummy")
+
+    dummy_energy = EnergyProfile(window_seconds=1.0, rms=[0.1] * 20, duration=20.0)
+    dummy_transcript = Transcript(
+        words=[Word(start=1.0, end=2.0, text="Hello"), Word(start=10.0, end=11.0, text="POG!")],
+        duration=20.0,
+    )
+
+    async def mock_extract_audio(src, dst, **kwargs):
+        dst.write_bytes(b"wav")
+
+    async def mock_analyze_energy(path):
+        return dummy_energy
+
+    async def mock_transcribe_audio(*args, **kwargs):
+        return dummy_transcript
+
+    def mock_fetch_chat(*args, **kwargs):
+        return [], False, ["Chat disabled"]
+
+    monkeypatch.setattr("app.services.hype.extract_audio", mock_extract_audio)
+    monkeypatch.setattr("app.services.hype.analyze_energy", mock_analyze_energy)
+    monkeypatch.setattr("app.services.hype.transcribe_audio", mock_transcribe_audio)
+    monkeypatch.setattr("app.services.hype.fetch_chat_messages", mock_fetch_chat)
+
+    settings = Settings(data_dir=tmp_path)
+    moments, transcript, energy, warnings = await analyze_hype_moments(
+        source_path=source,
+        url="https://youtube.com/watch?v=live123",
+        duration=20.0,
+        settings=settings,
+        top_n=1,
+        min_clip_seconds=10.0,
+        max_clip_seconds=20.0,
+    )
+
+    assert len(moments) >= 1
+    assert energy == dummy_energy
+    assert transcript == dummy_transcript
+    assert "Chat disabled" in warnings
+    assert moments[0].score >= 0.0

@@ -330,7 +330,7 @@ async def analyze_hype_moments(
     # 1. Audio extraction & energy profile
     audio_path = work_dir / "audio.wav"
     await extract_audio(source_path, audio_path, cancel_event=cancel_event)
-    energy = analyze_energy(audio_path)
+    energy = await analyze_energy(audio_path)
 
     # 2. Transcribe for speech excitement & sentence boundaries
     if on_stage:
